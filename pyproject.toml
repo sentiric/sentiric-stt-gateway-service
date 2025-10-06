@@ -1,0 +1,29 @@
+[tool.poetry]
+name = "sentiric-stt-gateway-service"
+version = "0.1.0"
+description = "Smart STT router and load balancer for Sentiric AI capabilities, supporting streaming and file uploads."
+authors = ["Sentiric Team"]
+license = "Apache-2.0"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+fastapi = "^0.111.0"
+uvicorn = {extras = ["standard"], version = "^0.30.1"}
+pydantic = "^2.7.3"
+pydantic-settings = "^2.3.4"
+python-dotenv = "^1.0.1"
+structlog = "^24.2.0"
+grpcio = "^1.64.1"
+# Protobuf stubs (auto-generated packages olacağı varsayılır)
+sentiric-contracts = { git = "https://github.com/sentiric/sentiric-contracts.git", tag = "v1.9.0" }
+# Streaming/WebSockets için gerekli olabilir
+websockets = "^12.0" 
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.2.2"
+httpx = "^0.27.0"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
