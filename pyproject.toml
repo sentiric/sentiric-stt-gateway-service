@@ -16,7 +16,7 @@ python-dotenv = "^1.0.1"
 structlog = "^24.2.0"
 grpcio = "^1.64.1"
 # Protobuf stubs (auto-generated packages olacağı varsayılır)
-sentiric-contracts = { git = "https://github.com/sentiric/sentiric-contracts.git", tag = "v1.9.0" }
+sentiric-contracts-py = { git = "https://github.com/sentiric/sentiric-contracts.git", tag = "v1.9.0" }
 # Streaming/WebSockets için gerekli olabilir
 websockets = "^12.0" 
 
