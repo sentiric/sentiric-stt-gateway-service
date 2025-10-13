@@ -1,56 +1,30 @@
-# --- STAGE 1: Builder ---
-FROM python:3.11-slim-bullseye AS builder
+### 📄 File: [ilgili-servis]/Dockerfile (STANDART ŞABLON)
 
-# Poetry kurulumu
-RUN pip install poetry
+ARG PYTHON_VERSION=3.11
+ARG BASE_IMAGE_TAG=${PYTHON_VERSION}-slim-bullseye
 
-# Build argümanlarını tanımla
+# STAGE 1: BUILDER
+FROM python:${BASE_IMAGE_TAG} AS builder
+WORKDIR /app
+RUN apt-get update && apt-get install -y --no-install-recommends curl build-essential && \
+    pip install --no-cache-dir --upgrade pip poetry && \
+    rm -rf /var/lib/apt/lists/*
+ENV POETRY_VIRTUALENVS_IN_PROJECT=true
+COPY poetry.lock pyproject.toml ./
+RUN poetry install --without dev --no-root
+
+# STAGE 2: PRODUCTION
+FROM python:${BASE_IMAGE_TAG}
+WORKDIR /app
 ARG GIT_COMMIT="unknown"
 ARG BUILD_DATE="unknown"
 ARG SERVICE_VERSION="0.0.0"
-
-WORKDIR /app
-
-# Proje dosyalarını kopyala
-COPY pyproject.toml poetry.lock ./
-COPY app ./app
-COPY README.md .
-
-# Bağımlılıkları kur
-RUN poetry install --no-root --only main
-
-# --- STAGE 2: Production ---
-FROM python:3.11-slim-bullseye
-
-WORKDIR /app
-
-# Gerekli sistem bağımlılıkları
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    netcat-openbsd \
-    curl \
-    ca-certificates && \
-    rm -rf /var/lib/apt/lists/*
-
-# Root olmayan kullanıcı oluştur
-RUN useradd -m -u 1001 appuser
-
-# Builder'dan sanal ortam bağımlılıklarını kopyala
-COPY --from=builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
-COPY --from=builder /app/app ./app
-
-# Dosya sahipliğini yeni kullanıcıya ver
-RUN chown -R appuser:appuser /app
-
-# YENİ: Build argümanlarını environment değişkenlerine ata
-ARG GIT_COMMIT
-ARG BUILD_DATE
-ARG SERVICE_VERSION
-ENV GIT_COMMIT=${GIT_COMMIT}
-ENV BUILD_DATE=${BUILD_DATE}
-ENV SERVICE_VERSION=${SERVICE_VERSION}
-
+ENV GIT_COMMIT=${GIT_COMMIT} BUILD_DATE=${BUILD_DATE} SERVICE_VERSION=${SERVICE_VERSION} PYTHONUNBUFFERED=1 PATH="/app/.venv/bin:$PATH"
+RUN apt-get update && apt-get install -y --no-install-recommends netcat-openbsd curl ca-certificates && rm -rf /var/lib/apt/lists/*
+RUN addgroup --system --gid 1001 appgroup && adduser --system --no-create-home --uid 1001 --ingroup appgroup appuser
+COPY --from=builder --chown=appuser:appgroup /app/.venv ./.venv
+COPY --chown=appuser:appgroup ./app ./app
 USER appuser
 
-# Başlangıç komutu: Uvicorn ile FastAPI'yi başlat
-# Not: STT Gateway HTTP/WebSocket'i 15010'da dinleyecektir.
-CMD ["/app/.venv/bin/uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "15010", "--no-access-log"]
+EXPOSE 15020 15021 15022
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "15020"]
