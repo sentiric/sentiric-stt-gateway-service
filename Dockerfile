@@ -53,4 +53,4 @@ USER appuser
 
 # Başlangıç komutu: Uvicorn ile FastAPI'yi başlat
 # Not: STT Gateway HTTP/WebSocket'i 15010'da dinleyecektir.
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "15010"]
+CMD ["/app/.venv/bin/uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "15010", "--no-access-log"]
