@@ -1,10 +1,8 @@
-# Dockerfile - TAM, EKSİKSİZ VE STANDARTLARA UYGUN FİNAL VERSİYON
-
 # --- STAGE 1: Builder ---
+# Bu aşama, projenin derlenmesinden sorumludur.
 FROM rust:1-slim-bookworm AS builder
 
-# === NİHAİ DÜZELTME: Gerekli tüm derleme araçlarını kuruyoruz ===
-# Bu, `sentiric-contracts`'ın `build.rs` script'inin CI'da çalışabilmesi için zorunludur.
+# Gerekli tüm derleme araçlarını kuruyoruz.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     protobuf-compiler \
@@ -18,25 +16,21 @@ RUN apt-get update && \
 ARG GIT_COMMIT
 ARG BUILD_DATE
 ARG SERVICE_VERSION
+
 WORKDIR /app
 
-# Docker katman önbelleklemesini optimize etmek için adımlı build
-COPY Cargo.toml Cargo.lock ./
-# `sentiric-contracts`'ı ve diğer bağımlılıkları indirmek ve derlemek için
-RUN mkdir src && echo "fn main() {}" > src/main.rs
-# Sadece bağımlılıkları derle. En uzun süren adım budur.
-RUN cargo build --release --locked
+# ÖNCE TÜM PROJE DOSYALARINI KOPYALA
+# Bu, Cargo'nun hem `src` hem de `tests` klasörlerini görmesini sağlar.
+COPY . .
 
-# Şimdi tüm kaynak kodunu kopyala
-COPY src ./src
-
-# Son ve hızlı build (sadece bizim kodumuz derlenecek)
+# Şimdi projeyi derle. Cargo, bağımlılıkları ve kodu tek seferde halleder.
 RUN cargo build --release --locked
 
 # --- STAGE 2: Final (Minimal) Image ---
+# Bu aşama, sadece çalıştırılabilir binary'yi içeren küçük bir imaj oluşturur.
 FROM debian:bookworm-slim
 
-# Çalışma zamanı için gerekli minimum sistem bağımlılıkları
+# Çalışma zamanı için gerekli minimum sistem bağımlılıkları.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
@@ -50,12 +44,15 @@ ENV BUILD_DATE=${BUILD_DATE}
 ENV SERVICE_VERSION=${SERVICE_VERSION}
 
 WORKDIR /app
+
+# Derlenmiş binary'yi builder aşamasından kopyala.
 COPY --from=builder /app/target/release/sentiric-stt-gateway-service .
 RUN chmod +x ./sentiric-stt-gateway-service
 
+# Güvenlik için non-root kullanıcı oluştur ve kullan.
 RUN useradd -m -u 1001 appuser
 USER appuser
 
-# Standart portlar
+# Standart portları dışarı aç.
 EXPOSE 15020 15021 15022
 ENTRYPOINT ["./sentiric-stt-gateway-service"]

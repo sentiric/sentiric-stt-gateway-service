@@ -4,33 +4,30 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-# Web ve Asenkron
+# ... (mevcut bağımlılıklarınız aynı kalacak) ...
 tokio = { version = "1", features = ["full"] }
 axum = { version = "0.7", features = ["json"] }
 async-stream = "0.3"
 tokio-stream = "0.1"
 reqwest = { version = "0.12", features = ["json"] }
-
-# gRPC ve Protobuf
 tonic = "0.11"
 prost = "0.12"
-
-# Yapılandırma ve Hata Yönetimi
-dotenvy = "0.15" # YENİ: .env dosyalarını okumak için eklendi.
 config = "0.14"
 thiserror = "1.0"
 anyhow = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-
-# Loglama
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+dotenvy = "0.15"
 
-# SENTIRIC STANDARDI
 [dependencies.sentiric-contracts]
 git = "https://github.com/sentiric/sentiric-contracts.git"
 tag = "v1.9.4"
+
+# YENİ BÖLÜM: Sadece testler ve örnekler için gerekli bağımlılıklar
+[dev-dependencies]
+hound = "3.5"
 
 # Entegrasyon testi için özel bir test binary'si tanımlıyoruz.
 [[test]]
