@@ -11,7 +11,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
     if args.len() < 2 {
         eprintln!("Kullanım: cargo run --test grpc_client -- <wav_dosyasi_yolu>");
-        return Ok(());
+        // DÜZELTME: Hatalı kullanımda başarılı (0) yerine hata kodu (1) ile çık.
+        std::process::exit(1);
     }
     let file_path = &args[1];
 
@@ -21,15 +22,22 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("🎤 '{}' dosyası okunuyor ve stream ediliyor...", file_path);
 
     let mut reader = hound::WavReader::open(file_path)?;
-    let spec = reader.spec();
+    // DÜZELTME: Kullanılmayan değişkeni `_spec` olarak işaretle.
+    let _spec = reader.spec();
     
+    let samples: Vec<i16> = reader.samples::<i16>().collect::<Result<_, _>>()?;
+
     // Ses dosyasını 8000 byte'lık (1 saniyelik 8kHz/16bit) parçalara ayır
     let chunk_size = 8000; 
-    let samples = reader.samples::<i16>().map(Result::unwrap).collect::<Vec<i16>>();
 
-    let stream = tokio_stream::iter(samples.chunks(chunk_size / 2).map(|chunk| {
+    // DÜZELTME: Referans yerine verinin kopyasını taşı.
+    // Her bir chunk'ı kendi `Vec<i16>`'ine dönüştürüyoruz.
+    let chunks: Vec<Vec<i16>> = samples.chunks(chunk_size / 2).map(|s| s.to_vec()).collect();
+
+    let stream = tokio_stream::iter(chunks.into_iter().map(|chunk| {
+        // Her bir chunk'ı byte vektörüne dönüştür.
         let mut buffer = Vec::with_capacity(chunk.len() * 2);
-        for &sample in chunk {
+        for &sample in &chunk {
             buffer.extend_from_slice(&sample.to_le_bytes());
         }
         TranscribeStreamRequest { audio_chunk: buffer }
@@ -44,8 +52,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         match res {
             Ok(response) => {
                 let text = response.partial_transcription.trim();
-                println!("   ↳ [Segment]: {}", text);
-                if response.is_final {
+                if !text.is_empty() {
+                    println!("   ↳ [Segment]: {}", text);
                     final_transcript.push(text.to_string());
                 }
             }
