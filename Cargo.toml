@@ -31,3 +31,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 [dependencies.sentiric-contracts]
 git = "https://github.com/sentiric/sentiric-contracts.git"
 tag = "v1.9.4"
+
+# Entegrasyon testi için özel bir test binary'si tanımlıyoruz.
+[[test]]
+name = "grpc_client"
+harness = false
