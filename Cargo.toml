@@ -17,13 +17,13 @@ prost = "0.12"
 # Yapılandırma ve Hata Yönetimi
 config = "0.14"
 thiserror = "1.0"
-anyhow = "1.0" # main.rs'de kolay hata yönetimi için
+anyhow = "1.0"
 
 # Loglama
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
-# SENTIRIC STANDARDI
+# === SENTIRIC STANDARDI: CONTRACTS KÜTÜPHANESİ ===
 [dependencies.sentiric-contracts]
 git = "https://github.com/sentiric/sentiric-contracts.git"
 tag = "v1.9.4"

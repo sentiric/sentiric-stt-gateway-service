@@ -1,38 +1,37 @@
-# Dockerfile - TAM VE NİHAİ VERSİYON
+# Dockerfile - TAM, EKSİKSİZ VE STANDARTLARA UYGUN FİNAL VERSİYON
 
 # --- STAGE 1: Builder ---
-# 'slim' versiyonunu kullanmak imaj boyutunu küçültür.
 FROM rust:1-slim-bookworm AS builder
 
-# === DÜZELTME BURADA: Gerekli derleme araçlarını kuruyoruz ===
-# protoc'u ve git'i bu aşamada kuruyoruz ki Cargo derlemesi başarılı olsun.
+# === NİHAİ DÜZELTME: Gerekli tüm derleme araçlarını kuruyoruz ===
+# Bu, `sentiric-contracts`'ın `build.rs` script'inin CI'da çalışabilmesi için zorunludur.
 RUN apt-get update && \
     apt-get install -y --no-install-recommends \
     protobuf-compiler \
+    libprotobuf-dev \
     git \
     pkg-config \
     libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
-# Build argümanlarını al (CI'dan gelecek)
+# Build argümanları (CI'dan gelecek)
 ARG GIT_COMMIT
 ARG BUILD_DATE
 ARG SERVICE_VERSION
-
 WORKDIR /app
 
-# Önce bağımlılıkları kopyalayıp derleyerek Docker'ın katman önbelleklemesini optimize ediyoruz.
+# Docker katman önbelleklemesini optimize etmek için adımlı build
 COPY Cargo.toml Cargo.lock ./
-# sentiric-contracts'ı indirebilmesi için boş bir src dizini ve main.rs oluşturuyoruz.
+# `sentiric-contracts`'ı ve diğer bağımlılıkları indirmek ve derlemek için
 RUN mkdir src && echo "fn main() {}" > src/main.rs
-# Sadece bağımlılıkları build et
-RUN cargo build --release
+# Sadece bağımlılıkları derle. En uzun süren adım budur.
+RUN cargo build --release --locked
 
 # Şimdi tüm kaynak kodunu kopyala
-COPY . .
+COPY src ./src
 
-# Son ve tam build'i yap
-RUN cargo build --release
+# Son ve hızlı build (sadece bizim kodumuz derlenecek)
+RUN cargo build --release --locked
 
 # --- STAGE 2: Final (Minimal) Image ---
 FROM debian:bookworm-slim
@@ -42,6 +41,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     && rm -rf /var/lib/apt/lists/*
 
+# Build argümanlarını runtime'a taşı
 ARG GIT_COMMIT
 ARG BUILD_DATE
 ARG SERVICE_VERSION
@@ -56,7 +56,6 @@ RUN chmod +x ./sentiric-stt-gateway-service
 RUN useradd -m -u 1001 appuser
 USER appuser
 
-# Standart portlarımızı açıyoruz
+# Standart portlar
 EXPOSE 15020 15021 15022
-
 ENTRYPOINT ["./sentiric-stt-gateway-service"]
