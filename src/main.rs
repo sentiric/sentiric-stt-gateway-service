@@ -1,5 +1,3 @@
-// main.rs - TAM VE DOĞRU HALİ
-
 use sentiric_stt_gateway_service::{
     config::AppConfig,
     grpc::service::MySttGateway,
@@ -39,14 +37,12 @@ async fn main() -> Result<()> {
     let grpc_task = tokio::spawn(run_grpc_server(config.clone()));
     let http_task = tokio::spawn(run_http_server(config.clone()));
 
-    // GÜNCELLEME: try_join sonucunu match ile doğru şekilde ele alıyoruz.
     match tokio::try_join!(grpc_task, http_task) {
         Ok((grpc_res, http_res)) => {
-            grpc_res?; // gRPC görevinden gelen Result'ı kontrol et
-            http_res?; // HTTP görevinden gelen Result'ı kontrol et
+            grpc_res?;
+            http_res?;
         }
         Err(join_err) => {
-            // Bir görevin paniklemesi durumunda hatayı döndür
             return Err(anyhow::Error::from(join_err));
         }
     }
@@ -55,7 +51,8 @@ async fn main() -> Result<()> {
 }
 
 async fn run_grpc_server(config: Arc<AppConfig>) -> Result<()> {
-    let addr = config.grpc_listen_addr;
+    // GÜNCELLEME: Doğru alan adını kullanıyoruz.
+    let addr = config.stt_gateway_service_grpc_listen_addr;
     let stt_gateway = MySttGateway::new(config);
     let grpc_server = SttGatewayServiceServer::new(stt_gateway);
     info!("gRPC sunucusu dinlemede: {}", addr);
@@ -64,7 +61,8 @@ async fn run_grpc_server(config: Arc<AppConfig>) -> Result<()> {
 }
 
 async fn run_http_server(config: Arc<AppConfig>) -> Result<()> {
-    let addr = config.http_listen_addr;
+    // GÜNCELLEME: Doğru alan adını kullanıyoruz.
+    let addr = config.stt_gateway_service_http_listen_addr;
     let http_app = Router::new()
         .route("/health", get(health_check))
         .with_state(config);
@@ -82,7 +80,6 @@ async fn health_check(
     
     info!("Sağlık kontrolü: Uzman STT motoru kontrol ediliyor...");
 
-    // GÜNCELLEME: `?` operatörü yerine `match` kullanarak hatayı ele alıyoruz.
     let endpoint = match Endpoint::from_shared(whisper_url.clone()) {
         Ok(ep) => ep,
         Err(e) => {
