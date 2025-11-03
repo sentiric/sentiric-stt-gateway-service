@@ -8,24 +8,22 @@ edition = "2021"
 tokio = { version = "1", features = ["full"] }
 axum = { version = "0.7", features = ["json"] }
 async-stream = "0.3"
-tokio-stream = "0.1" # DÜZELTME: "features" kısmı kaldırıldı.
+tokio-stream = "0.1" # Doğru kullanım, 'features' yok.
 reqwest = { version = "0.12", features = ["json"] }
 
+# ... (geri kalan bağımlılıklar aynı) ...
 # gRPC ve Protobuf
 tonic = "0.11"
 prost = "0.12"
-
 # Yapılandırma ve Hata Yönetimi
 config = "0.14"
 thiserror = "1.0"
 anyhow = "1.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
-
 # Loglama
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
-
 # SENTIRIC STANDARDI
 [dependencies.sentiric-contracts]
 git = "https://github.com/sentiric/sentiric-contracts.git"

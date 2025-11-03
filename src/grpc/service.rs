@@ -7,7 +7,7 @@ use sentiric_contracts::sentiric::stt::v1::{
     WhisperTranscribeStreamRequest,
 };
 use std::sync::Arc;
-use tokio_stream::{Stream, StreamExt}; // BU SATIR ZATEN DOĞRU VE GEREKLİ
+use tokio_stream::{Stream, StreamExt};
 use tonic::{transport::Channel, Request, Response, Status, Streaming};
 use tracing::{error, info, instrument, warn};
 
@@ -58,14 +58,15 @@ impl SttGatewayService for MySttGateway {
 
         let inbound_stream = request.into_inner();
 
-        let whisper_request_stream = inbound_stream.filter_map(|result| async move {
+        // GÜNCELLEME: `async move` kaldırıldı. Bu closure artık senkron ve `Option` döndürüyor.
+        let whisper_request_stream = inbound_stream.filter_map(|result| {
             match result {
                 Ok(req) => Some(WhisperTranscribeStreamRequest {
                     audio_chunk: req.audio_chunk,
                 }),
                 Err(status) => {
                     warn!("İstemci akışında bir hata oluştu, akış sonlandırılıyor: {}", status);
-                    None
+                    None // Hatalı elemanı akıştan çıkarır.
                 }
             }
         });
