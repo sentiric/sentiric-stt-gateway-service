@@ -6,10 +6,10 @@ edition = "2021"
 [dependencies]
 # Web ve Asenkron
 tokio = { version = "1", features = ["full"] }
-axum = { version = "0.7", features = ["json"] } # json özelliği eklendi
+axum = { version = "0.7", features = ["json"] }
 async-stream = "0.3"
-tokio-stream = "0.1"
-reqwest = { version = "0.12", features = ["json"] } # Sağlık kontrolü için eklendi
+tokio-stream = { version = "0.1", features = ["map"] } # `map` özelliği eklendi
+reqwest = { version = "0.12", features = ["json"] }
 
 # gRPC ve Protobuf
 tonic = "0.11"
@@ -20,7 +20,7 @@ config = "0.14"
 thiserror = "1.0"
 anyhow = "1.0"
 serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0" # Sağlık kontrolü yanıtı için eklendi
+serde_json = "1.0"
 
 # Loglama
 tracing = "0.1"

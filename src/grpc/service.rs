@@ -4,10 +4,10 @@ use sentiric_contracts::sentiric::stt::v1::{
     stt_gateway_service_server::SttGatewayService,
     stt_whisper_service_client::SttWhisperServiceClient,
     TranscribeRequest, TranscribeResponse, TranscribeStreamRequest, TranscribeStreamResponse,
-    WhisperTranscribeStreamRequest, // YENİ: Uzman motorun beklediği tipi import ediyoruz
+    WhisperTranscribeStreamRequest,
 };
 use std::sync::Arc;
-use tokio_stream::{Stream, StreamExt}; // YENİ: StreamExt'i stream transformasyonu için ekliyoruz
+use tokio_stream::{Stream, StreamExt};
 use tonic::{transport::Channel, Request, Response, Status, Streaming};
 use tracing::{error, info, instrument, warn};
 
@@ -56,21 +56,31 @@ impl SttGatewayService for MySttGateway {
                 }
             })?;
 
-        // GÜNCELLEME: Gelen akışı dönüştürerek uzman motora gönderiyoruz.
         let inbound_stream = request.into_inner();
-        let transformed_inbound_stream = inbound_stream.map(|item| {
-            item.map(|req| WhisperTranscribeStreamRequest {
-                audio_chunk: req.audio_chunk,
-            })
+
+        // GÜNCELLEME: Gelen akıştaki Result'ları işleyerek uzman motorun beklediği tipe dönüştür.
+        // `filter_map` ile sadece başarılı (Ok) mesajları alıp dönüştürüyoruz.
+        // Hatalı (Err) bir mesaj gelirse loglayıp akışı o noktada sonlandırıyoruz.
+        let whisper_request_stream = inbound_stream.filter_map(|result| async move {
+            match result {
+                Ok(req) => Some(WhisperTranscribeStreamRequest {
+                    audio_chunk: req.audio_chunk,
+                }),
+                Err(status) => {
+                    warn!("İstemci akışında bir hata oluştu, akış sonlandırılıyor: {}", status);
+                    None
+                }
+            }
         });
 
         info!("Akış, uzman STT motoruna yönlendiriliyor...");
         let upstream_response = client
-            .whisper_transcribe_stream(transformed_inbound_stream) // Dönüştürülmüş akışı kullanıyoruz
+            .whisper_transcribe_stream(whisper_request_stream)
             .await
             .map_err(GatewayError::UpstreamStreamError)?;
-
-        // GÜNCELLEME: Uzman motordan gelen akışı istemcinin beklediği tipe dönüştürüyoruz.
+            
+        // GÜNCELLEME: Uzman motordan gelen akışı istemcinin beklediği tipe dönüştür.
+        // Bu kısım, tipler farklı olduğu için hala gereklidir ve doğru çalışır.
         let upstream_stream = upstream_response.into_inner();
         let transformed_outbound_stream = upstream_stream.map(|item| {
             item.map(|resp| TranscribeStreamResponse {
