@@ -19,11 +19,14 @@ config = "0.14"
 thiserror = "1.0"
 anyhow = "1.0"
 
+# === DÜZELTME BURADA: Serde bağımlılığını ekliyoruz ===
+serde = { version = "1.0", features = ["derive"] }
+
 # Loglama
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
-# === SENTIRIC STANDARDI: CONTRACTS KÜTÜPHANESİ ===
+# SENTIRIC STANDARDI
 [dependencies.sentiric-contracts]
 git = "https://github.com/sentiric/sentiric-contracts.git"
 tag = "v1.9.4"

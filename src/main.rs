@@ -1,89 +1,53 @@
-// src/main.rs - TAM VE SON HALİ
+// main.rs - DOĞRU HALİ
 
-// Sentiric Contracts kütüphanesinden ihtiyacımız olan modülleri doğrudan `use` ile çağırıyoruz.
-// Artık `mod grpc_generated;` gibi bir şeye gerek yok, çünkü kütüphane bunu kendisi yapıyor.
-use sentiric_contracts::sentiric::stt::v1::{
-    stt_gateway_service_server::{SttGatewayService, SttGatewayServiceServer},
-    TranscribeRequest, TranscribeResponse, TranscribeStreamRequest, TranscribeStreamResponse,
+// Projemizin kendi kütüphanesini ve modüllerini `use` ile çağırıyoruz
+use sentiric_stt_gateway_service::{
+    config::AppConfig,
+    grpc::service::MySttGateway,
 };
 
+use anyhow::Result;
 use axum::{routing::get, Router};
-use std::net::SocketAddr; // <-- BU IMPORT GEREKLİ
+use sentiric_contracts::sentiric::stt::v1::stt_gateway_service_server::SttGatewayServiceServer;
+use std::net::SocketAddr;
 use tonic::transport::Server;
-use tonic::{Request, Response, Status, Streaming};
-use tokio_stream::Stream;
-
-// Gateway servisimizin state'ini tutacak yapı.
-#[derive(Debug, Default)]
-pub struct MySttGateway {}
-
-// gRPC servis kontratını (trait) implemente ediyoruz.
-#[tonic::async_trait]
-impl SttGatewayService for MySttGateway {
-    async fn transcribe(
-        &self,
-        request: Request<TranscribeRequest>,
-    ) -> Result<Response<TranscribeResponse>, Status> {
-        println!("gRPC Transcribe isteği alındı: {:?}", request.get_ref());
-        let reply = TranscribeResponse {
-            transcription: "Merhaba, bu tekil bir testtir.".into(),
-        };
-        Ok(Response::new(reply))
-    }
-
-    type TranscribeStreamStream =
-        std::pin::Pin<Box<dyn Stream<Item = Result<TranscribeStreamResponse, Status>> + Send>>;
-
-    async fn transcribe_stream(
-        &self,
-        request: Request<Streaming<TranscribeStreamRequest>>,
-    ) -> Result<Response<Self::TranscribeStreamStream>, Status> {
-        println!("gRPC TranscribeStream isteği alındı.");
-        let output = async_stream::try_stream! {
-            // İleride buraya gerçek akış mantığı gelecek
-            yield TranscribeStreamResponse {
-                partial_transcription: "Merhaba, bu bir stream testidir.".into(),
-                is_final: true,
-            };
-        };
-        Ok(Response::new(Box::pin(output) as Self::TranscribeStreamStream))
-    }
-}
+use tracing::info;
+use tracing_subscriber::{fmt, EnvFilter, Registry};
+use tracing_subscriber::prelude::*;
 
 #[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // Adresleri tanımla
-    let grpc_addr: SocketAddr = "[::]:15021".parse()?;
-    let http_addr: SocketAddr = "[::]:15020".parse()?;
-
-    // gRPC sunucusunu hazırla
-    let stt_gateway = MySttGateway::default();
-    let grpc_server = SttGatewayServiceServer::new(stt_gateway);
-    println!("✅ gRPC sunucusu {} adresinde başlatılıyor...", grpc_addr);
-    let grpc_task = tokio::spawn(Server::builder().add_service(grpc_server).serve(grpc_addr));
-
-    // HTTP sunucusunu hazırla
-    let http_app = Router::new().route("/health", get(health_check));
-    println!("✅ HTTP sağlık kontrolü http://{} adresinde başlatılıyor...", http_addr);
+async fn main() -> Result<()> {
+    let config = AppConfig::load()?;
     
-    // === DÜZELTME BURADA ===
-    // `axum::serve` zaten bir Future döndürdüğü için, onu doğrudan spawn etmiyoruz.
-    // Listener'ı `serve`'e verip, sonucunu spawn ediyoruz.
-    let listener = tokio::net::TcpListener::bind(http_addr).await?;
-    let http_task = tokio::spawn(async move {
-        axum::serve(listener, http_app).await
-    });
-    
-    // Her iki sunucunun da çalışmasını bekle. Birisi çökerse, diğeri de durur.
-    let (grpc_result, http_result) = tokio::join!(grpc_task, http_task);
+    let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new(&config.log_level));
+    let subscriber = Registry::default().with(filter);
+    if config.env == "development" {
+        subscriber.with(fmt::layer()).init();
+    } else {
+        subscriber.with(fmt::layer().json()).init();
+    }
 
-    // Hata varsa propagate et
-    grpc_result??;
-    http_result??;
+    info!(version = %config.service_version, "STT Gateway Servisi başlatılıyor...");
 
+    let grpc_task = tokio::spawn(run_grpc_server(config.grpc_listen_addr));
+    let http_task = tokio::spawn(run_http_server(config.http_listen_addr));
+
+    tokio::try_join!(grpc_task, http_task)?;
     Ok(())
 }
 
-async fn health_check() -> &'static str {
-    "ok"
+async fn run_grpc_server(addr: SocketAddr) -> Result<()> {
+    let stt_gateway = MySttGateway::default();
+    let grpc_server = SttGatewayServiceServer::new(stt_gateway);
+    info!("gRPC sunucusu dinlemede: {}", addr);
+    Server::builder().add_service(grpc_server).serve(addr).await?;
+    Ok(())
+}
+
+async fn run_http_server(addr: SocketAddr) -> Result<()> {
+    let http_app = Router::new().route("/health", get(|| async { "ok" }));
+    info!("HTTP sağlık kontrolü dinlemede: {}", addr);
+    let listener = tokio::net::TcpListener::bind(addr).await?;
+    axum::serve(listener, http_app).await?;
+    Ok(())
 }

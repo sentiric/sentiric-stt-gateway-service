@@ -1170,6 +1170,7 @@ dependencies = [
  "config",
  "prost",
  "sentiric-contracts",
+ "serde",
  "thiserror",
  "tokio",
  "tokio-stream",
