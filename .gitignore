@@ -6,6 +6,7 @@ target/
 
 # Ortam dosyaları
 .env
+.env.*
 !.env.example
 
 # IDE / Editör
