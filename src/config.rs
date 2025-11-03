@@ -3,33 +3,40 @@ use config::{Config, Environment};
 use serde::Deserialize;
 use std::net::SocketAddr;
 
-#[derive(Debug, Deserialize)]
+#[derive(Debug, Deserialize, Clone)]
 pub struct AppConfig {
-    #[serde(default = "default_grpc_addr")]
+    // Kendi dinleme adresleri
+    #[serde(rename = "stt_gateway_service_grpc_listen_addr")]
     pub grpc_listen_addr: SocketAddr,
-    #[serde(default = "default_http_addr")]
+    #[serde(rename = "stt_gateway_service_http_listen_addr")]
     pub http_listen_addr: SocketAddr,
-    pub stt_whisper_service_url: String, // Örn: "http://localhost:15031"
-    #[serde(default = "default_env")]
+
+    // Konuşacağı uzman motorun adresi
+    #[serde(rename = "stt_whisper_service_target_grpc_url")]
+    pub stt_whisper_service_target_grpc_url: String,
+
+    // Platform genelindeki standart değişkenler
     pub env: String,
-    #[serde(default = "default_log_level")]
     pub log_level: String,
+    
+    // Build anında enjekte edilen meta veriler
     #[serde(default = "default_version")]
     pub service_version: String,
 }
 
-fn default_grpc_addr() -> SocketAddr { "[::]:15021".parse().unwrap() }
-fn default_http_addr() -> SocketAddr { "[::]:15020".parse().unwrap() }
-fn default_env() -> String { "production".to_string() }
-fn default_log_level() -> String { "info".to_string() }
-fn default_version() -> String { "0.1.0".to_string() }
+fn default_version() -> String {
+    env!("CARGO_PKG_VERSION").to_string()
+}
 
 impl AppConfig {
     pub fn load() -> Result<Self> {
         let builder = Config::builder()
-            .add_source(Environment::with_prefix("SENTIRIC").separator("__").try_parsing(true))
-            .set_default("service_version", env!("CARGO_PKG_VERSION"))?;
+            // Tüm ortam değişkenlerini, belirli bir önek olmadan okur.
+            .add_source(Environment::default().separator("__"));
         
-        builder.build()?.try_deserialize().context("Yapılandırma okunamadı")
+        builder
+            .build()?
+            .try_deserialize()
+            .context("Ortam değişkenlerinden yapılandırma okunamadı")
     }
 }

@@ -3,17 +3,24 @@ use tonic::Status;
 
 #[derive(Error, Debug)]
 pub enum GatewayError {
-    #[error("Uzman STT servisine ulaşılamıyor: {0}")]
-    UpstreamUnavailable(String),
-    #[error("Uzman STT servisinden geçersiz yanıt: {0}")]
-    UpstreamInvalidResponse(String),
+    #[error("Uzman STT motoruna ({url}) bağlanılamadı: {source}")]
+    UpstreamConnectionFailed {
+        url: String,
+        #[source]
+        source: tonic::transport::Error,
+    },
+
+    #[error("Uzman STT motoru akışında hata: {0}")]
+    UpstreamStreamError(#[from] Status),
 }
 
 impl From<GatewayError> for Status {
     fn from(err: GatewayError) -> Self {
         match err {
-            GatewayError::UpstreamUnavailable(msg) => Status::unavailable(msg),
-            _ => Status::internal(err.to_string()),
+            GatewayError::UpstreamConnectionFailed { url, .. } => {
+                Status::unavailable(format!("Bağımlı servis olan STT motoruna ({}) ulaşılamıyor.", url))
+            }
+            GatewayError::UpstreamStreamError(status) => status,
         }
     }
 }

@@ -6,9 +6,10 @@ edition = "2021"
 [dependencies]
 # Web ve Asenkron
 tokio = { version = "1", features = ["full"] }
-axum = "0.7"
+axum = { version = "0.7", features = ["json"] } # json özelliği eklendi
 async-stream = "0.3"
 tokio-stream = "0.1"
+reqwest = { version = "0.12", features = ["json"] } # Sağlık kontrolü için eklendi
 
 # gRPC ve Protobuf
 tonic = "0.11"
@@ -18,9 +19,8 @@ prost = "0.12"
 config = "0.14"
 thiserror = "1.0"
 anyhow = "1.0"
-
-# === DÜZELTME BURADA: Serde bağımlılığını ekliyoruz ===
 serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0" # Sağlık kontrolü yanıtı için eklendi
 
 # Loglama
 tracing = "0.1"

@@ -1,0 +1,100 @@
+# docker-compose.dev.yml
+# Sentiric Geliştirme Ortamı için Docker Compose dosyası
+# Bu dosya, Sentiric platformunun geliştirme ortamında çalıştırılması için gerekli
+
+
+networks:
+  sentiric-net:
+    name: "${NETWORK_NAME:-sentiric-net}"
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${NETWORK_SUBNET}
+          gateway: ${NETWORK_GATEWAY}
+
+volumes:
+
+
+  # [capability-stt]: Konuşma Tanıma Yetenekleri (STT Capabilities)
+  # --------------------------------------------------
+  stt_whisper_cache:
+
+  
+services:
+
+  # [capability-stt]: Konuşma Tanıma Yetenekleri (STT Capabilities)
+  # -------------------------------------------------- 
+
+  #  stt-streaming-service 
+
+  stt-whisper-service:
+    # Geliştirme ortamında hızı artırmak için whisper'ı hazır imajdan çekebiliriz
+    image: ghcr.io/sentiric/sentiric-stt-whisper-service:gpu-latest
+    build: 
+      context: ../sentiric-stt-whisper-service
+      dockerfile: Dockerfile.gpu
+    env_file: ["${ENV_FILE_PATH}"]
+    volumes:
+      - "${CERTIFICATES_REPO_PATH}:/sentiric-certificates:ro"
+      - stt_whisper_cache:/app/model-cache
+    ports:
+      - "${STT_WHISPER_SERVICE_HTTP_PORT:-15030}:${STT_WHISPER_SERVICE_HTTP_PORT:-15030}"
+      - "${STT_WHISPER_SERVICE_GRPC_PORT:-15031}:${STT_WHISPER_SERVICE_GRPC_PORT:-15031}"
+      - "${STT_WHISPER_SERVICE_METRICS_PORT:-15032}:${STT_WHISPER_SERVICE_METRICS_PORT:-15032}"                
+    networks:
+      sentiric-net:
+        ipv4_address: ${STT_WHISPER_SERVICE_IPV4_ADDRESS}
+    dns:
+      - ${DISCOVERY_SERVICE_IPV4_ADDRESS}
+    dns_search:
+      - ${DISCOVERY_DNS_SEARCH_DOMAIN}
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${STT_WHISPER_SERVICE_HTTP_PORT:-15030}/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10m # Modelin yüklenmesi uzun sürebilir
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]      
+    # Bu servisin doğrudan bir bağımlılığı yok.
+
+
+  # =============================================================
+  # KATMAN 5: YAPAY ZEKA AĞ GEÇİTLERİ (AI GATEWAYS)
+  # Uzman motorlara istekleri yönlendiren akıllı katman.
+  # =============================================================
+
+  # [capability-stt]: Konuşma Tanıma Yetenekleri (STT Capabilities)
+  # --------------------------------------------------
+  stt-gateway-service:
+    build: { context: ../sentiric-stt-gateway-service }
+    env_file: ["${ENV_FILE_PATH}"]
+    volumes:
+      - "${CERTIFICATES_REPO_PATH}:/sentiric-certificates:ro"
+    ports:
+      - "${STT_GATEWAY_SERVICE_HTTP_PORT:-15020}:${STT_GATEWAY_SERVICE_HTTP_PORT:-15020}"
+      - "${STT_GATEWAY_SERVICE_GRPC_PORT:-15021}:${STT_GATEWAY_SERVICE_GRPC_PORT:-15021}"
+      - "${STT_GATEWAY_SERVICE_METRICS_PORT:-15022}:${STT_GATEWAY_SERVICE_METRICS_PORT:-15022}"
+    networks:
+      sentiric-net:
+        ipv4_address: ${STT_GATEWAY_SERVICE_IPV4_ADDRESS}
+    dns:
+      - ${DISCOVERY_SERVICE_IPV4_ADDRESS}
+    dns_search:
+      - ${DISCOVERY_DNS_SEARCH_DOMAIN}
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:${STT_GATEWAY_SERVICE_HTTP_PORT:-15020}/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s # Rust derlemesi hızlı olduğu için kısa bir periyot
+    depends_on:
+      # Uygulama Servisleri -> Sadece 'started' olmaları yeterli    
+      stt-whisper-service: { condition: service_started }
