@@ -18,7 +18,6 @@ pub struct AppConfig {
     pub service_version: String,
 }
 
-// ... (default fonksiyonları aynı kalır) ...
 fn default_grpc_addr() -> SocketAddr { "[::]:15021".parse().unwrap() }
 fn default_http_addr() -> SocketAddr { "[::]:15020".parse().unwrap() }
 fn default_env() -> String { "development".to_string() }
@@ -28,8 +27,13 @@ fn default_version() -> String { env!("CARGO_PKG_VERSION").to_string() }
 impl AppConfig {
     pub fn load() -> Result<Self> {
         let builder = Config::builder()
-            // Sadece ortam değişkenlerini oku. .env dosyasını `dotenvy` zaten yükledi.
-            .add_source(Environment::default().separator("_"));
+            .add_source(config::File::with_name(".env").required(false))
+            // NİHAİ DÜZELTME:
+            // 1. `Environment::default()` ile başlıyoruz.
+            // 2. `.try_parsing(true)` ile "true", "false", "123" gibi değerleri doğru tiplere çevirmesini sağlıyoruz.
+            // 3. `.separator("__")` kullanarak, değişken adlarındaki `_` karakterini hiyerarşi olarak ALGILAMAMASINI sağlıyoruz.
+            //    Çünkü bizim değişkenlerimiz `DATABASE_HOST` gibi düz, `DATABASE__HOST` gibi hiyerarşik değil.
+            .add_source(Environment::default().try_parsing(true).separator("__"));
         
         builder
             .build()?
