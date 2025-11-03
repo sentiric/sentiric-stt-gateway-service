@@ -15,8 +15,13 @@ use tracing_subscriber::prelude::*;
 #[tokio::main]
 #[instrument]
 async fn main() -> Result<()> {
-    let config = Arc::new(AppConfig::load()?);
+    // YENİ: Program başlarken .env dosyasını oku ve ortam değişkeni olarak yükle.
+    dotenvy::dotenv().ok();
 
+    // Ortam değişkenlerinden yapılandırmayı yükle
+    let config = Arc::new(AppConfig::load()?);
+    
+    // ... (dosyanın geri kalanı aynı) ...
     let filter = EnvFilter::try_from_default_env()
         .or_else(|_| EnvFilter::try_new(&config.log_level))
         .unwrap();
@@ -50,8 +55,8 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+// ... (dosyanın geri kalanı aynı, değişiklik yok) ...
 async fn run_grpc_server(config: Arc<AppConfig>) -> Result<()> {
-    // GÜNCELLEME: Doğru alan adını kullanıyoruz.
     let addr = config.stt_gateway_service_grpc_listen_addr;
     let stt_gateway = MySttGateway::new(config);
     let grpc_server = SttGatewayServiceServer::new(stt_gateway);
@@ -61,7 +66,6 @@ async fn run_grpc_server(config: Arc<AppConfig>) -> Result<()> {
 }
 
 async fn run_http_server(config: Arc<AppConfig>) -> Result<()> {
-    // GÜNCELLEME: Doğru alan adını kullanıyoruz.
     let addr = config.stt_gateway_service_http_listen_addr;
     let http_app = Router::new()
         .route("/health", get(health_check))
