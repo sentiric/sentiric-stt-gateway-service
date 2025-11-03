@@ -8,7 +8,7 @@ edition = "2021"
 tokio = { version = "1", features = ["full"] }
 axum = { version = "0.7", features = ["json"] }
 async-stream = "0.3"
-tokio-stream = { version = "0.1", features = ["map"] } # `map` özelliği eklendi
+tokio-stream = "0.1" # DÜZELTME: "features" kısmı kaldırıldı.
 reqwest = { version = "0.12", features = ["json"] }
 
 # gRPC ve Protobuf

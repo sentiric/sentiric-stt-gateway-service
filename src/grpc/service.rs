@@ -7,7 +7,7 @@ use sentiric_contracts::sentiric::stt::v1::{
     WhisperTranscribeStreamRequest,
 };
 use std::sync::Arc;
-use tokio_stream::{Stream, StreamExt};
+use tokio_stream::{Stream, StreamExt}; // BU SATIR ZATEN DOĞRU VE GEREKLİ
 use tonic::{transport::Channel, Request, Response, Status, Streaming};
 use tracing::{error, info, instrument, warn};
 
@@ -58,9 +58,6 @@ impl SttGatewayService for MySttGateway {
 
         let inbound_stream = request.into_inner();
 
-        // GÜNCELLEME: Gelen akıştaki Result'ları işleyerek uzman motorun beklediği tipe dönüştür.
-        // `filter_map` ile sadece başarılı (Ok) mesajları alıp dönüştürüyoruz.
-        // Hatalı (Err) bir mesaj gelirse loglayıp akışı o noktada sonlandırıyoruz.
         let whisper_request_stream = inbound_stream.filter_map(|result| async move {
             match result {
                 Ok(req) => Some(WhisperTranscribeStreamRequest {
@@ -79,8 +76,6 @@ impl SttGatewayService for MySttGateway {
             .await
             .map_err(GatewayError::UpstreamStreamError)?;
             
-        // GÜNCELLEME: Uzman motordan gelen akışı istemcinin beklediği tipe dönüştür.
-        // Bu kısım, tipler farklı olduğu için hala gereklidir ve doğru çalışır.
         let upstream_stream = upstream_response.into_inner();
         let transformed_outbound_stream = upstream_stream.map(|item| {
             item.map(|resp| TranscribeStreamResponse {
