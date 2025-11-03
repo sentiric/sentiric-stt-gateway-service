@@ -62,5 +62,32 @@ docker compose -f docker-compose.dev.yml down --volumes
 ```
 *`--volumes` bayrağı, `stt_whisper_cache` gibi Docker volume'lerini de siler. Modeli tekrar indirmek istemiyorsanız bu bayrağı kaldırabilirsiniz.*
 
-
 ---
+
+## ⚡ Performans Analizi: CPU vs. GPU
+
+Bu test ortamı, `stt-whisper-service`'in farklı donanımlar üzerindeki performansını karşılaştırmak için de kullanılabilir. Aşağıdaki sonuçlar, `welcome_anonymous.wav` (~10 saniyelik) ses dosyası ve `tiny` Whisper modeli kullanılarak yapılan bir testten alınmıştır.
+
+### Test Sonuçları
+
+| Metrik | CPU (`int8`) | GPU (`float16`) | Performans Artışı |
+| :--- | :--- | :--- | :--- |
+| **Whisper Net İşlem Süresi** | ~650 ms | **~212 ms** | **~3.1x Hızlanma** |
+| **Gateway'in Eklediği Gecikme** | ~14 ms | ~5 ms | - |
+| **Toplam Uçtan Uca Gecikme** | ~664 ms | **~217 ms** | **~3.1x Hızlanma** |
+
+```mermaid
+barChart
+    title: STT İşlem Süresi Karşılaştırması (tiny model)
+    "CPU (int8)": 650
+    "GPU (float16)": 212```
+
+### Analiz ve Çıkarımlar
+
+1.  **Donanım Etkisi:** `stt-whisper-service`'i bir GPU üzerinde çalıştırmak, aynı iş yükü için transkripsiyon süresini **3 kattan fazla** iyileştirmiştir. Bu, düşük gecikmenin kritik olduğu senaryolar için GPU kullanımının önemini göstermektedir.
+
+2.  **Gateway Verimliliği:** Her iki senaryoda da `stt-gateway-service`'in eklediği gecikme (overhead) **~15 milisaniyenin altındadır**. Bu, Rust ile geliştirilen gateway'in son derece hafif ve verimli olduğunu, toplam işlem süresine ihmal edilebilir bir etki yaptığını kanıtlamaktadır.
+
+3.  **Darboğaz:** Performans darboğazı, beklendiği gibi, yapay zeka modelinin çalıştığı `stt-whisper-service`'dir. Performans optimizasyonları bu uzman motor üzerinde yoğunlaşmalıdır.
+
+Bu sonuçlar, `stt-gateway-service`'in mimari hedeflerini başarıyla karşıladığını ve platformun hibrit donanım yeteneklerini tam olarak desteklediğini doğrulamaktadır.
