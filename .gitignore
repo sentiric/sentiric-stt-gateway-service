@@ -5,8 +5,9 @@ target/
 *.pdb
 
 # Ortam dosyaları
-.env
-.env.*
+# .env ile başlayan TÜM dosyaları yoksay
+.env*
+# AMA .env.example dosyasını yoksayma
 !.env.example
 
 # IDE / Editör

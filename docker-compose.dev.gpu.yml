@@ -1,0 +1,59 @@
+version: '3.8'
+
+networks:
+  sentiric-stt-test-net:
+    driver: bridge
+
+volumes:
+  stt_whisper_cache:
+
+services:
+  stt-gateway-service:
+    build:
+      context: .
+    env_file:
+      - .env.dev.gpu # GPU'ya özel yapılandırma dosyası
+    ports:
+      - "15020:15020"
+      - "15021:15021"
+    networks:
+      - sentiric-stt-test-net
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:15020/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+    depends_on:
+      stt-whisper-service:
+        condition: service_healthy
+
+  stt-whisper-service:
+    # GPU için optimize edilmiş imajı kullanıyoruz.
+    image: ghcr.io/sentiric/sentiric-stt-whisper-service:gpu-latest
+    hostname: stt-whisper-service
+    env_file:
+      - .env.dev.gpu # GPU'ya özel yapılandırma dosyası
+    volumes:
+      - stt_whisper_cache:/app/model-cache
+    ports:
+      - "15030:15030"
+      - "15031:15031"
+    networks:
+      - sentiric-stt-test-net
+    restart: always
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:15030/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10m
+    # BU BÖLÜM KRİTİK: Docker'a bu konteyner için GPU kaynaklarını ayırmasını söylüyoruz.
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
