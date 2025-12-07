@@ -1,43 +1,29 @@
-use anyhow::{Context, Result};
-use config::{Config, Environment};
+use config::{Config, File, Environment};
 use serde::Deserialize;
-use std::net::SocketAddr;
+use anyhow::Result;
 
 #[derive(Debug, Deserialize, Clone)]
 pub struct AppConfig {
-    #[serde(default = "default_grpc_addr")]
-    pub stt_gateway_service_grpc_listen_addr: SocketAddr,
-    #[serde(default = "default_http_addr")]
-    pub stt_gateway_service_http_listen_addr: SocketAddr,
-    pub stt_whisper_service_target_grpc_url: String,
-    #[serde(default = "default_env")]
     pub env: String,
-    #[serde(default = "default_log_level")]
-    pub log_level: String,
-    #[serde(default = "default_version")]
+    pub rust_log: String,
     pub service_version: String,
+    pub http_port: u16,
+    pub grpc_port: u16,
+    pub stt_whisper_url: String,
 }
-
-fn default_grpc_addr() -> SocketAddr { "[::]:15021".parse().unwrap() }
-fn default_http_addr() -> SocketAddr { "[::]:15020".parse().unwrap() }
-fn default_env() -> String { "development".to_string() }
-fn default_log_level() -> String { "debug".to_string() }
-fn default_version() -> String { env!("CARGO_PKG_VERSION").to_string() }
 
 impl AppConfig {
     pub fn load() -> Result<Self> {
         let builder = Config::builder()
-            .add_source(config::File::with_name(".env").required(false))
-            // NİHAİ DÜZELTME:
-            // 1. `Environment::default()` ile başlıyoruz.
-            // 2. `.try_parsing(true)` ile "true", "false", "123" gibi değerleri doğru tiplere çevirmesini sağlıyoruz.
-            // 3. `.separator("__")` kullanarak, değişken adlarındaki `_` karakterini hiyerarşi olarak ALGILAMAMASINI sağlıyoruz.
-            //    Çünkü bizim değişkenlerimiz `DATABASE_HOST` gibi düz, `DATABASE__HOST` gibi hiyerarşik değil.
-            .add_source(Environment::default().try_parsing(true).separator("__"));
-        
-        builder
-            .build()?
-            .try_deserialize()
-            .context("Yapılandırma yüklenemedi. Gerekli ortam değişkenlerinin (örn: STT_WHISPER_SERVICE_TARGET_GRPC_URL) ayarlandığından emin olun.")
+            .add_source(File::with_name(".env").required(false))
+            .add_source(Environment::default().separator("__"))
+            // Varsayılanlar
+            .set_default("env", "development")?
+            .set_default("rust_log", "info")?
+            .set_default("service_version", "0.1.0")?
+            .set_default("http_port", 15010)?
+            .set_default("grpc_port", 15011)?;
+
+        builder.build()?.try_deserialize().map_err(|e| e.into())
     }
 }

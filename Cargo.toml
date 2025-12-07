@@ -2,41 +2,48 @@
 name = "sentiric-stt-gateway-service"
 version = "0.1.0"
 edition = "2021"
+authors = ["Sentiric Team"]
 
 [dependencies]
-# Web ve Asenkron
-tokio = { version = "1", features = ["full"] }
-axum = { version = "0.7", features = ["json"] }
-async-stream = "0.3"
-tokio-stream = "0.1"
-reqwest = { version = "0.12", features = ["json"] }
+# Async Runtime & Web
+tokio = { version = "1.36", features = ["full"] }
+axum = { version = "0.7", features = ["json", "http2"] } 
+tower = { version = "0.4", features = ["util", "timeout", "load_shed"] }
+tower-http = { version = "0.5", features = ["trace", "cors"] }
+hyper = { version = "1.0", features = ["full"] }
 
-# gRPC ve Protobuf
-tonic = "0.11"
+# gRPC & Protobuf
+tonic = { version = "0.11", features = ["tls", "gzip"] }
 prost = "0.12"
 
-# Yapılandırma ve Hata Yönetimi
-dotenvy = "0.15"
-config = "0.14"
-thiserror = "1.0"
-anyhow = "1.0"
+# Streaming (STT için kritik)
+tokio-stream = "0.1"
+async-stream = "0.3"
+futures = "0.3"
+
+# Data & Serialization
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
+bytes = "1.5"
 
-# Loglama
+# Config & Environment
+config = "0.14"
+dotenvy = "0.15"
+thiserror = "1.0"
+anyhow = "1.0"
+
+# Observability
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
 
-# SENTIRIC STANDARDI
+# Client & Network
+reqwest = { version = "0.11", features = ["json", "rustls-tls"] }
+url = "2.5"
+
+# Sentiric Ecosystem
 [dependencies.sentiric-contracts]
 git = "https://github.com/sentiric/sentiric-contracts.git"
-tag = "v1.9.4"
+branch = "main"
 
-# Sadece testler ve örnekler için gerekli bağımlılıklar
-[dev-dependencies]
-hound = "3.5"
-
-# Entegrasyon testi için özel bir test binary'si tanımlıyoruz.
-[[test]]
-name = "grpc_client"
-harness = false
+[build-dependencies]
+tonic-build = "0.11"

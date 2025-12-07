@@ -1,0 +1,21 @@
+
+networks:
+  sentiric-net:
+    name: "${NETWORK_NAME:-sentiric.cloud}"
+    driver: bridge
+
+services:
+  stt-gateway-service:
+    container_name: sentiric-stt-gateway
+    restart: always
+    networks:
+      - sentiric-net
+    ports:
+      - "15010:15010"
+      - "15011:15011"
+      - "15012:15012"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:15010/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
