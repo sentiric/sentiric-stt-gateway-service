@@ -1,3 +1,4 @@
+// path: src/grpc/server.rs
 use crate::clients::whisper::WhisperClient;
 use sentiric_contracts::sentiric::stt::v1::stt_gateway_service_server::SttGatewayService;
 use sentiric_contracts::sentiric::stt::v1::{
@@ -6,7 +7,7 @@ use sentiric_contracts::sentiric::stt::v1::{
 };
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status, Streaming};
-use tracing::{info, error, instrument};
+use tracing::{info, warn, error, instrument};
 use futures::StreamExt;
 
 pub struct SttGateway {
@@ -35,33 +36,39 @@ impl SttGatewayService for SttGateway {
         &self,
         request: Request<Streaming<TranscribeStreamRequest>>,
     ) -> Result<Response<Self::TranscribeStreamStream>, Status> {
-        info!("STT Stream Connection Established.");
+        
+        // 1. TRACE ID EXTRACT
+        let trace_id = request.metadata()
+            .get("x-trace-id")
+            .and_then(|m| m.to_str().ok())
+            .map(|s| s.to_string());
+
+        info!("🎧 STT Stream Connection Established. TraceID: {}", trace_id.as_deref().unwrap_or("none"));
         
         let inbound_stream = request.into_inner();
 
-        // 1. INPUT MAPPING (Gateway -> Whisper)
-        // İstemciden gelen `TranscribeStreamRequest` paketlerini,
-        // Whisper motorunun beklediği `WhisperTranscribeStreamRequest` paketlerine çeviriyoruz.
-        // `filter_map` hatalı paketleri sessizce yutmak yerine loglayıp devam edebilir.
+        // 2. INPUT MAPPING (Gateway -> Whisper)
+        // İstemciden gelen stream'i Whisper formatına çevir
         let outbound_stream = inbound_stream.filter_map(|res| {
             match res {
                 Ok(req) => Some(WhisperTranscribeStreamRequest {
                     audio_chunk: req.audio_chunk,
-                    // Eğer gateway request içinde config varsa buraya eklenebilir
-                    // Şimdilik sadece raw audio chunk iletiyoruz.
                 }),
                 Err(e) => {
-                    error!("Inbound stream error: {}", e);
+                    warn!("Inbound stream packet error: {}", e);
                     None
                 }
             }
         });
 
-        // 2. UPSTREAM CALL
-        let mut whisper_response_stream = self.whisper_client.transcribe_stream(outbound_stream).await
-            .map_err(|e| Status::unavailable(format!("Whisper Engine unavailable: {}", e)))?;
+        // 3. UPSTREAM CALL (Whisper'a Bağlan)
+        let mut whisper_response_stream = self.whisper_client.transcribe_stream(outbound_stream, trace_id.clone()).await
+            .map_err(|e| {
+                error!("Failed to connect to Whisper Engine: {}", e);
+                Status::unavailable("Expert STT Engine Unavailable")
+            })?;
 
-        // 3. OUTPUT MAPPING (Whisper -> Gateway -> Client)
+        // 4. OUTPUT MAPPING (Whisper -> Gateway -> Client)
         let (tx, rx) = tokio::sync::mpsc::channel(128);
 
         tokio::spawn(async move {
@@ -73,16 +80,18 @@ impl SttGatewayService for SttGateway {
                             is_final: w_resp.is_final,
                         };
                         if tx.send(Ok(g_resp)).await.is_err() {
-                            break; // Client koptu
+                            warn!("Client disconnected, stopping stream.");
+                            break; 
                         }
                     }
                     Err(e) => {
-                        let _ = tx.send(Err(Status::internal(format!("Upstream error: {}", e)))).await;
+                        error!("Upstream stream error: {}", e);
+                        let _ = tx.send(Err(Status::internal("Error received from STT Engine"))).await;
                         break;
                     }
                 }
             }
-            info!("STT Stream Completed.");
+            info!("STT Stream Completed. TraceID: {}", trace_id.as_deref().unwrap_or("none"));
         });
 
         Ok(Response::new(ReceiverStream::new(rx)))

@@ -1,21 +1,68 @@
-
+# path: docker-compose.yml
 networks:
   sentiric-net:
-    name: "${NETWORK_NAME:-sentiric.cloud}"
     driver: bridge
+    ipam:
+      config:
+        - subnet: ${NETWORK_SUBNET:-10.88.0.0/16}
+          gateway: ${NETWORK_GATEWAY:-10.88.0.1}
 
 services:
+  # 🧠 KATMAN 3: STT GATEWAY SERVICE
   stt-gateway-service:
-    container_name: sentiric-stt-gateway
-    restart: always
-    networks:
-      - sentiric-net
+    image: ghcr.io/sentiric/sentiric-stt-gateway-service:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ../sentiric-certificates:/sentiric-certificates:ro
+    environment:
+      - ENV=development
+      - RUST_LOG=info,sentiric_stt_gateway_service=debug
+      
+      # Upstream (mTLS ile)
+      - STT_WHISPER_SERVICE_GRPC_URL=https://stt-whisper-service:15031
+      
+      # Güvenlik
+      - GRPC_TLS_CA_PATH=/sentiric-certificates/certs/ca.crt
+      - STT_GATEWAY_SERVICE_CERT_PATH=/sentiric-certificates/certs/stt-gateway-service.crt
+      - STT_GATEWAY_SERVICE_KEY_PATH=/sentiric-certificates/certs/stt-gateway-service.key
+      
     ports:
-      - "15010:15010"
-      - "15011:15011"
-      - "15012:15012"
+      - "15020:15020" # HTTP Health
+      - "15021:15021" # gRPC
+      - "15022:15022" # Metrics
+    networks:
+      sentiric-net:
+        ipv4_address: 10.88.50.2
+    restart: always
+    depends_on:
+      stt-whisper-service:
+        condition: service_healthy
+
+  # 🦾 KATMAN 4: STT WHISPER SERVICE (Gerçek Motor)
+  stt-whisper-service:
+    image: ghcr.io/sentiric/sentiric-stt-whisper-service:latest
+    # Build context üst dizinden erişilebilir olmalı veya imaj çekilmeli
+    # Test ortamı için build context'i kaldırıyorum, image kullanılsın.
+    volumes:
+      - ../sentiric-certificates:/sentiric-certificates:ro
+      - stt-models:/models
+    environment:
+      - STT_WHISPER_SERVICE_GRPC_PORT=15031
+      - STT_WHISPER_SERVICE_HTTP_PORT=15030
+      # Security
+      - STT_WHISPER_SERVICE_CA_PATH=/sentiric-certificates/certs/ca.crt
+      - STT_WHISPER_SERVICE_CERT_PATH=/sentiric-certificates/certs/stt-whisper-service.crt
+      - STT_WHISPER_SERVICE_KEY_PATH=/sentiric-certificates/certs/stt-whisper-service.key
+    networks:
+      sentiric-net:
+        ipv4_address: 10.88.50.3
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:15010/health"]
-      interval: 10s
-      timeout: 5s
+      test: ["CMD", "curl", "-f", "http://localhost:15030/health"]
+      interval: 30s
+      timeout: 10s
       retries: 3
+
+volumes:
+  stt-models:
