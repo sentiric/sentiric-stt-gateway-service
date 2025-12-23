@@ -1,53 +1,35 @@
-# 🧠 Mantık ve Akış Mimarisi
+# 🧠 Akış Mantığı (Streaming Logic)
 
-Bu belge, `stt-gateway-service`in canlı ses akışlarını nasıl yönettiğini ve motor seçimini nasıl yaptığını açıklar.
+Bu servis, Rust'ın `Tokio` asenkron çalışma zamanı ve `Tonic` gRPC kütüphanesini kullanarak yüksek performanslı bir "Streaming Proxy" görevi görür.
 
-## 1. Yönlendirme Tablosu (Routing Logic)
-
-Gateway, gRPC akışının **ilk mesajında** gelen `StreamingConfig` içindeki `model_preference` alanına bakar.
-
-| Tercih (Preference) | Hedef Servis | URL (Env Değişkeni) | Protokol |
-| :--- | :--- | :--- | :--- |
-| `whisper` (Varsayılan) | **Whisper C++** | `STT_WHISPER_SERVICE_GRPC_URL` | gRPC Stream |
-| `google` | **Google STT** | `STT_GOOGLE_API_KEY` | REST/gRPC |
-| `azure` | **Azure STT** | `STT_AZURE_KEY` | REST |
-
-## 2. Akış Diyagramı (Stateful Streaming)
-
-Bu servis "Stateless" değildir; bir akış süresince bağlantıyı açık tutar.
+## Veri Akış Diyagramı
 
 ```mermaid
 sequenceDiagram
-    participant Client as Telephony Action
-    participant GW as STT Gateway
-    participant Whisper as Whisper Engine (C++)
+    participant Client
+    participant Gateway
+    participant Whisper
 
-    Note over Client, GW: gRPC Stream Başlatılır
+    Client->>Gateway: gRPC Stream Start (mTLS)
+    Gateway->>Whisper: gRPC Stream Start (mTLS)
 
-    Client->>GW: 1. Mesaj: Config (Lang: "tr", Model: "whisper")
-    GW->>GW: Motor Seçimi: Whisper
-    GW->>Whisper: Bağlantı Kur (gRPC)
-    
-    loop Ses Akışı (Saniyede ~50 paket)
-        Client->>GW: 2. Mesaj: AudioChunk (Bytes)
-        GW->>Whisper: AudioChunk (Bytes)
-        
-        par Async Response
-            Whisper-->>GW: Transcript ("Merha...")
-            GW-->>Client: Transcript ("Merha...")
-        and
-            Whisper-->>GW: Transcript ("Merhaba")
-            GW-->>Client: Transcript ("Merhaba")
+    par Audio Flow
+        loop Every 20ms
+            Client->>Gateway: Audio Chunk
+            Gateway->>Whisper: Audio Chunk (Forwarded)
+        end
+    and Text Flow
+        loop Asynchronous
+            Whisper-->>Gateway: Partial Transcript
+            Gateway-->>Client: Partial Transcript
         end
     end
-    
-    Client->>GW: Stream Kapat (EOF)
-    GW->>Whisper: Stream Kapat
-    Whisper-->>GW: Final Transcript
-    GW-->>Client: Final Transcript
 ```
 
-## 3. Hata Yönetimi
+## Stream Dönüşümü (Mapping)
 
-*   **Bağlantı Kopması:** Eğer Whisper servisi akış ortasında koparsa, Gateway istemciye `UNAVAILABLE` hatası dönmeli ve akışı güvenli bir şekilde kapatmalıdır.
-*   **VAD (Sessizlik):** Gateway, sessizlik tespiti yapmaz; bunu motorlara (Whisper) veya istemciye (`telephony-action`) bırakır. Sadece veriyi taşır.
+Gateway, iki farklı proto mesajı arasında çeviri yapar:
+*   **Girdi:** `TranscribeStreamRequest` -> `WhisperTranscribeStreamRequest`
+*   **Çıktı:** `WhisperTranscribeStreamResponse` -> `TranscribeStreamResponse`
+
+Bu işlem `src/grpc/server.rs` dosyasında `filter_map` ve `map` fonksiyonları ile reaktif (reactive) olarak yapılır.

@@ -1,46 +1,34 @@
 # 👂 Sentiric STT Gateway Service
 
 [![Status](https://img.shields.io/badge/status-active-success.svg)]()
-[![Architecture](https://img.shields.io/badge/architecture-layer_3_gateway-blue.svg)]()
-[![Language](https://img.shields.io/badge/language-Rust-orange.svg)]()
+[![Security](https://img.shields.io/badge/security-mTLS-green.svg)]()
+[![Protocol](https://img.shields.io/badge/protocol-BiDirectional_Stream-orange.svg)]()
 
-**Sentiric İletişim İşletim Sistemi**'nin "İşitme Merkezi"dir. Platforma giren tüm canlı ses akışlarını (Audio Streams) karşılar ve bunları analiz edilmesi için uygun "Uzman Motorlara" (Whisper, Google STT vb.) yönlendirir.
+**Sentiric İletişim İşletim Sistemi**'nin "İşitme Merkezi"dir. Platforma giren tüm canlı ses akışlarını (Audio Streams) karşılar, mTLS tüneli üzerinden güvenli bir şekilde Whisper Motoruna iletir ve anlık transkripsiyonları geri döndürür.
 
-## 🎯 Temel Sorumluluklar
+## 🎯 Temel Yetenekler
 
-1.  **Akış Yönetimi (Bi-Directional Streaming):** İstemciden gelen ses parçalarını (chunks) alıp motora iletirken, motordan gelen metin parçalarını (transcripts) anlık olarak istemciye iletir.
-2.  **Akıllı Yönlendirme:** İsteğin `language_code` veya `model_preference` parametrelerine göre trafiği `stt-whisper-service` (Yerel) veya bulut sağlayıcılara yönlendirir.
-3.  **Protokol Dönüşümü:** İç gRPC formatını, hedef motorun beklediği formata (gRPC veya WebSocket) dönüştürür.
-4.  **Yük Dengeleme (Load Balancing):** Birden fazla Whisper işçisi (worker) varsa, yükü aralarında dağıtır (Gelecek özellik).
+1.  **Çift Yönlü Akış (Bi-Directional Streaming):** İstemci ses gönderirken aynı anda sunucu metin gönderebilir. Tam full-duplex iletişim.
+2.  **Sıfır Kopya (Zero-Copy Proxy):** Gelen ses paketlerini bellekte biriktirmeden veya işlemeden doğrudan motora aktarır. Minimal gecikme.
+3.  **Güvenlik:** Tüm iletişim mTLS ile şifrelidir.
 
 ## 🏗️ Mimari Konum
 
-Bu servis **Katman 3 (Ağ Geçitleri)** seviyesinde yer alır.
+*   **Üst Akış (Caller):** `telephony-action-service`
+*   **Alt Akış (Upstream):** `stt-whisper-service` (C++ / GPU)
 
-*   **Üst Akış (Callers):** `telephony-action-service`.
-*   **Alt Akış (Downstreams):**
-    *   `stt-whisper-service` (C++ / GPU / Yerel / gRPC)
-    *   *(Opsiyonel)* Google Speech-to-Text (Bulut / REST)
+## 📦 Kurulum ve Ortam Değişkenleri
 
-## 📦 Kurulum ve Çalıştırma
-
-### Gereksinimler
-*   Rust (1.75+)
-*   Protobuf Compiler (`protoc`)
-
-### Komutlar
 ```bash
-# Ortamı hazırla
-make setup
+# .env Örneği
+HOST=0.0.0.0
+GRPC_PORT=15011
 
-# Servisi başlat
-make up
+# Hedef Motor
+STT_WHISPER_URL=http://stt-whisper-service:15031
 
-# Logları izle
-make logs
+# Güvenlik
+GRPC_TLS_CA_PATH=../sentiric-certificates/certs/ca.crt
+STT_GATEWAY_SERVICE_CERT_PATH=../sentiric-certificates/certs/stt-gateway-service.crt
+STT_GATEWAY_SERVICE_KEY_PATH=../sentiric-certificates/certs/stt-gateway-service.key
 ```
-
-## 🔌 API ve Portlar
-
-*   **gRPC (15011):** `sentiric.stt.v1.SttGatewayService`
-*   **HTTP (15010):** `/health`, `/metrics`
