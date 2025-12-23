@@ -1,70 +1,107 @@
+// Dosya: tests/grpc_client.rs
 use std::env;
+use std::time::Duration;
 use tokio_stream::StreamExt;
+use tonic::transport::{Certificate, Channel, ClientTlsConfig, Identity};
+use tonic::metadata::MetadataValue; // <-- EKLENDİ
 use sentiric_contracts::sentiric::stt::v1::{
     stt_gateway_service_client::SttGatewayServiceClient,
     TranscribeStreamRequest,
 };
 
-// Bu test, bir WAV dosyasını okuyup gateway'e stream eder ve sonuçları yazdırır.
+// Sertifika yollarını host makine yapısına göre ayarlıyoruz
+const CA_PATH: &str = "../sentiric-certificates/certs/ca.crt";
+// Test için Gateway Client sertifikalarını kullanıyoruz
+const CERT_PATH: &str = "../sentiric-certificates/certs/stt-gateway-service.crt";
+const KEY_PATH: &str = "../sentiric-certificates/certs/stt-gateway-service.key";
+
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let args: Vec<String> = env::args().collect();
-    if args.len() < 2 {
-        eprintln!("Kullanım: cargo run --test grpc_client -- <wav_dosyasi_yolu>");
-        // DÜZELTME: Hatalı kullanımda başarılı (0) yerine hata kodu (1) ile çık.
-        std::process::exit(1);
-    }
-    let file_path = &args[1];
+    let file_path = args.last().expect("Lütfen bir WAV dosyası yolu verin");
 
-    println!("🔌 STT Gateway'e bağlanılıyor: http://127.0.0.1:15021");
-    let mut client = SttGatewayServiceClient::connect("http://127.0.0.1:15021").await?;
-
-    println!("🎤 '{}' dosyası okunuyor ve stream ediliyor...", file_path);
-
-    let mut reader = hound::WavReader::open(file_path)?;
-    // DÜZELTME: Kullanılmayan değişkeni `_spec` olarak işaretle.
-    let _spec = reader.spec();
+    println!("🔒 Güvenlik Katmanı (mTLS) Hazırlanıyor...");
     
+    // 1. Sertifikaları Yükle
+    let ca_cert = tokio::fs::read(CA_PATH).await.expect("CA sertifikası bulunamadı");
+    let client_cert = tokio::fs::read(CERT_PATH).await.expect("Client sertifikası bulunamadı");
+    let client_key = tokio::fs::read(KEY_PATH).await.expect("Client key bulunamadı");
+
+    let ca = Certificate::from_pem(ca_cert);
+    let identity = Identity::from_pem(client_cert, client_key);
+
+    // 2. TLS Konfigürasyonu
+    let tls = ClientTlsConfig::new()
+        .domain_name("sentiric.cloud") 
+        .ca_certificate(ca)
+        .identity(identity);
+
+    println!("🔌 STT Gateway'e bağlanılıyor (Port 15021)...");
+    
+    // 3. Bağlantı Kanalı
+    let channel = Channel::from_static("https://127.0.0.1:15021")
+        .tls_config(tls)?
+        .connect()
+        .await?;
+
+    let mut client = SttGatewayServiceClient::new(channel);
+
+    println!("🎤 '{}' dosyası okunuyor...", file_path);
+    let mut reader = hound::WavReader::open(file_path)?;
     let samples: Vec<i16> = reader.samples::<i16>().collect::<Result<_, _>>()?;
 
-    // Ses dosyasını 8000 byte'lık (1 saniyelik 8kHz/16bit) parçalara ayır
-    let chunk_size = 8000; 
+    // 4. Streaming Başlat
+    // 16kHz, Mono, 16-bit varsayıyoruz. 
+    // Her chunk yaklaşık 200ms ses taşısın (16000 * 0.2 = 3200 sample -> 6400 byte)
+    let chunk_size = 3200; 
+    let chunks: Vec<Vec<i16>> = samples.chunks(chunk_size).map(|s| s.to_vec()).collect();
 
-    // DÜZELTME: Referans yerine verinin kopyasını taşı.
-    // Her bir chunk'ı kendi `Vec<i16>`'ine dönüştürüyoruz.
-    let chunks: Vec<Vec<i16>> = samples.chunks(chunk_size / 2).map(|s| s.to_vec()).collect();
+    println!("🚀 Akış Başlatılıyor ({} Paket)...", chunks.len());
 
-    let stream = tokio_stream::iter(chunks.into_iter().map(|chunk| {
-        // Her bir chunk'ı byte vektörüne dönüştür.
-        let mut buffer = Vec::with_capacity(chunk.len() * 2);
-        for &sample in &chunk {
-            buffer.extend_from_slice(&sample.to_le_bytes());
+    let stream = async_stream::stream! {
+        for chunk in chunks {
+            let mut buffer = Vec::with_capacity(chunk.len() * 2);
+            for &sample in &chunk {
+                buffer.extend_from_slice(&sample.to_le_bytes());
+            }
+            yield TranscribeStreamRequest { audio_chunk: buffer };
+            
+            // Gerçek zamanlı akışı simüle etmek için hafif bekleme
+            tokio::time::sleep(Duration::from_millis(50)).await;
         }
-        TranscribeStreamRequest { audio_chunk: buffer }
-    }));
+    };
 
-    println!("🎧 Sunucudan transkripsiyon bekleniyor...");
-    let mut response_stream = client.transcribe_stream(stream).await?.into_inner();
+    // --- TRACE ID EKLEME BÖLÜMÜ ---
+    let mut request = tonic::Request::new(stream);
+    // Rastgele veya sabit bir Trace ID ekliyoruz
+    request.metadata_mut().insert("x-trace-id", MetadataValue::from_static("prod-test-session-001"));
+    // ------------------------------
 
-    let mut final_transcript = Vec::new();
+    let response = client.transcribe_stream(request).await?;
+    let mut response_stream = response.into_inner();
+
+    println!("📝 Yanıtlar Dinleniyor...\n------------------------------------------------");
 
     while let Some(res) = response_stream.next().await {
         match res {
-            Ok(response) => {
-                let text = response.partial_transcription.trim();
-                if !text.is_empty() {
-                    println!("   ↳ [Segment]: {}", text);
-                    final_transcript.push(text.to_string());
+            Ok(msg) => {
+                // Sadece dolu yanıtları veya final yanıtı yazdır
+                if !msg.partial_transcription.trim().is_empty() || msg.is_final {
+                    if msg.is_final {
+                        println!("✅ [FINAL]: {}", msg.partial_transcription);
+                    } else {
+                        // Satır içi güncelleme efekti
+                        print!("\r⏳ [PARTIAL]: {:<50}", msg.partial_transcription);
+                        use std::io::Write;
+                        std::io::stdout().flush().unwrap();
+                    }
                 }
             }
-            Err(e) => eprintln!("❌ Stream hatası: {}", e),
+            Err(e) => eprintln!("\n❌ HATA: {}", e),
         }
     }
     
-    println!("\n✅ Stream tamamlandı.");
-    println!("====================");
-    println!("Final Transkript: {}", final_transcript.join(" "));
-    println!("====================");
-
+    println!("\n------------------------------------------------");
+    println!("🎉 Test Tamamlandı.");
     Ok(())
 }

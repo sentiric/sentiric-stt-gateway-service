@@ -35,3 +35,12 @@ tag = "v1.12.3"
 
 [build-dependencies]
 tonic-build = "0.11"
+
+# Sadece testler için gerekli kütüphaneler
+[dev-dependencies]
+hound = "3.5"
+
+# YENİ EKLENEN KISIM:
+[[test]]
+name = "grpc_client"
+harness = false

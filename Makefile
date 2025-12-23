@@ -7,13 +7,13 @@ setup: ## Ortam dosyasını hazırlar
 	@if [ ! -f .env ]; then cp .env.example .env; echo "✅ .env oluşturuldu."; fi
 
 up: setup ## Geliştirme ortamını başlatır
-	docker compose -f docker-compose.yml -f up --build -d
+	docker compose -f docker-compose.yml up --build -d
 
 down: ## Ortamı durdurur
 	docker compose -f docker-compose.yml down --remove-orphans
 
 logs: ## Logları izler
-	docker compose -f docker-compose.yml logs -f stt-gateway-service
+	docker compose -f docker-compose.yml logs -f
 
 test: ## Birim testleri çalıştırır
 	cargo test

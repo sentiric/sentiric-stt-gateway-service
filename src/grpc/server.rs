@@ -8,7 +8,7 @@ use sentiric_contracts::sentiric::stt::v1::{
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status, Streaming};
 use tracing::{info, warn, error, instrument};
-use futures::StreamExt;
+use futures::StreamExt; // filter_map için gerekli
 
 pub struct SttGateway {
     whisper_client: WhisperClient,
@@ -48,9 +48,10 @@ impl SttGatewayService for SttGateway {
         let inbound_stream = request.into_inner();
 
         // 2. INPUT MAPPING (Gateway -> Whisper)
-        // İstemciden gelen stream'i Whisper formatına çevir
+        // DÜZELTME: futures::StreamExt::filter_map bir Future bekler.
+        // std::future::ready() ile senkron sonucu Future'a sarıyoruz.
         let outbound_stream = inbound_stream.filter_map(|res| {
-            match res {
+            let result = match res {
                 Ok(req) => Some(WhisperTranscribeStreamRequest {
                     audio_chunk: req.audio_chunk,
                 }),
@@ -58,7 +59,8 @@ impl SttGatewayService for SttGateway {
                     warn!("Inbound stream packet error: {}", e);
                     None
                 }
-            }
+            };
+            std::future::ready(result)
         });
 
         // 3. UPSTREAM CALL (Whisper'a Bağlan)
