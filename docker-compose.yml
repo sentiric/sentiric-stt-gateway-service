@@ -24,6 +24,9 @@ networks:
         - subnet: ${NETWORK_SUBNET:-10.88.0.0/16}
           gateway: ${NETWORK_GATEWAY:-10.88.0.1}
 
+volumes:
+  stt-whisper-models:
+
 services:
   # =============================================================
   # KATMAN 3: STT GATEWAY SERVICE (Rust)
@@ -63,8 +66,9 @@ services:
       sentiric-net:
         ipv4_address: 10.88.50.2
     restart: always
+    # DÜZELTME: HTTP yok, gRPC (TCP) portunu kontrol et
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:15020/health" ]
+      test: [ "CMD", "nc", "-z", "localhost", "15021" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -95,8 +99,7 @@ services:
       - STT_WHISPER_SERVICE_FLASH_ATTN=true
       - STT_WHISPER_SERVICE_PARALLEL_REQUESTS=2
       
-      # --- Güvenlik (mTLS Server) - KRİTİK DÜZELTME ---
-      # C++ kodu bu değişken isimlerini bekler (src/config.h)
+      # --- Güvenlik (mTLS Server) ---
       - STT_WHISPER_SERVICE_CA_PATH=/sentiric-certificates/certs/ca.crt
       - STT_WHISPER_SERVICE_CERT_PATH=/sentiric-certificates/certs/stt-whisper-service.crt
       - STT_WHISPER_SERVICE_KEY_PATH=/sentiric-certificates/certs/stt-whisper-service.key
@@ -107,13 +110,10 @@ services:
     networks:
       sentiric-net:
         ipv4_address: 10.88.50.3
-    # Whisper HTTP (15030) şifresizdir, curl ile kontrol edilir
+    # Whisper HTTP sunucusu açtığı için curl kullanabiliriz
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:15030/health" ]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 2m 
-
-volumes:
-  stt-whisper-models:
