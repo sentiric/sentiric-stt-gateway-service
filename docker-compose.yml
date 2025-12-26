@@ -53,7 +53,7 @@ services:
       # --- Hedef Servis (Whisper) ---
       - STT_WHISPER_SERVICE_GRPC_URL=https://stt-whisper-service:15031
     
-      # --- Güvenlik (mTLS) ---
+      # --- Güvenlik (mTLS) - Standart İsimlendirme ---
       - GRPC_TLS_CA_PATH=/sentiric-certificates/certs/ca.crt
       - STT_GATEWAY_SERVICE_CERT_PATH=/sentiric-certificates/certs/stt-gateway-service.crt
       - STT_GATEWAY_SERVICE_KEY_PATH=/sentiric-certificates/certs/stt-gateway-service.key
@@ -66,7 +66,6 @@ services:
       sentiric-net:
         ipv4_address: 10.88.50.2
     restart: always
-    # DÜZELTME: HTTP yok, gRPC (TCP) portunu kontrol et
     healthcheck:
       test: [ "CMD", "nc", "-z", "localhost", "15021" ]
       interval: 10s
@@ -99,8 +98,11 @@ services:
       - STT_WHISPER_SERVICE_FLASH_ATTN=true
       - STT_WHISPER_SERVICE_PARALLEL_REQUESTS=2
       
-      # --- Güvenlik (mTLS Server) ---
-      - STT_WHISPER_SERVICE_CA_PATH=/sentiric-certificates/certs/ca.crt
+      # --- Güvenlik (mTLS Server) - STANDARTLAŞTIRILDI ---
+      # Artık tüm servisler GRPC_TLS_CA_PATH kullanıyor.
+      # Servise özel sertifikalar ise kendi adlarıyla kalıyor.
+      
+      - GRPC_TLS_CA_PATH=/sentiric-certificates/certs/ca.crt
       - STT_WHISPER_SERVICE_CERT_PATH=/sentiric-certificates/certs/stt-whisper-service.crt
       - STT_WHISPER_SERVICE_KEY_PATH=/sentiric-certificates/certs/stt-whisper-service.key
       
@@ -110,10 +112,9 @@ services:
     networks:
       sentiric-net:
         ipv4_address: 10.88.50.3
-    # Whisper HTTP sunucusu açtığı için curl kullanabiliriz
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:15030/health" ]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 2m 
+      start_period: 2m
