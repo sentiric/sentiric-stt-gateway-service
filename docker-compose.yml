@@ -8,7 +8,7 @@ x-ai-service-template: &ai-service-template
         devices:
           - driver: nvidia
             count: 1
-            capabilities: [ gpu, compute, utility ] # GPU Erişimini Garantiye Al
+            capabilities: [ gpu, compute, utility ]
   healthcheck:
     interval: 30s
     timeout: 10s
@@ -23,9 +23,6 @@ networks:
       config:
         - subnet: ${NETWORK_SUBNET:-10.88.0.0/16}
           gateway: ${NETWORK_GATEWAY:-10.88.0.1}
-
-volumes:
-  stt-whisper-models:
 
 services:
   # =============================================================
@@ -43,7 +40,7 @@ services:
       - ENV=production
       - RUST_LOG=info,sentiric_stt_gateway=debug
       
-      # --- Servis Kimliği (Standardize) ---
+      # --- Servis Kimliği ---
       - STT_GATEWAY_SERVICE_HOST=stt-gateway-service
       - STT_GATEWAY_SERVICE_LISTEN_ADDRESS=0.0.0.0
       - STT_GATEWAY_SERVICE_HTTP_PORT=15020
@@ -51,24 +48,23 @@ services:
       - STT_GATEWAY_SERVICE_METRICS_PORT=15022
 
       # --- Hedef Servis (Whisper) ---
-      # HTTPS ile gitmesi zorunlu (mTLS)
       - STT_WHISPER_SERVICE_GRPC_URL=https://stt-whisper-service:15031
     
-      # --- Güvenlik (mTLS Client & Server) ---
+      # --- Güvenlik (mTLS) ---
       - GRPC_TLS_CA_PATH=/sentiric-certificates/certs/ca.crt
       - STT_GATEWAY_SERVICE_CERT_PATH=/sentiric-certificates/certs/stt-gateway-service.crt
       - STT_GATEWAY_SERVICE_KEY_PATH=/sentiric-certificates/certs/stt-gateway-service.key
+
     ports:
-      - "15020:15020" # HTTP Health
-      - "15021:15021" # gRPC
-      - "15022:15022" # Metrics
+      - "15020:15020"
+      - "15021:15021"
+      - "15022:15022"
     networks:
       sentiric-net:
         ipv4_address: 10.88.50.2
     restart: always
-    # Gateway HTTP sunucusu da başlatıyor, curl ile kontrol edebiliriz
     healthcheck:
-      test: [ "CMD", "nc", "-z", "localhost", "15021" ]
+      test: [ "CMD", "curl", "-f", "http://localhost:15020/health" ]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -91,6 +87,7 @@ services:
       - STT_WHISPER_SERVICE_LISTEN_ADDRESS=0.0.0.0
       - STT_WHISPER_SERVICE_HTTP_PORT=15030
       - STT_WHISPER_SERVICE_GRPC_PORT=15031
+      - STT_WHISPER_SERVICE_METRICS_PORT=15032
       
       # --- GPU & Performans ---
       - STT_WHISPER_SERVICE_DEVICE=cuda
@@ -98,21 +95,25 @@ services:
       - STT_WHISPER_SERVICE_FLASH_ATTN=true
       - STT_WHISPER_SERVICE_PARALLEL_REQUESTS=2
       
-      # --- Güvenlik (mTLS Server) ---
-      - GRPC_TLS_CA_PATH=/sentiric-certificates/certs/ca.crt
+      # --- Güvenlik (mTLS Server) - KRİTİK DÜZELTME ---
+      # C++ kodu bu değişken isimlerini bekler (src/config.h)
+      - STT_WHISPER_SERVICE_CA_PATH=/sentiric-certificates/certs/ca.crt
       - STT_WHISPER_SERVICE_CERT_PATH=/sentiric-certificates/certs/stt-whisper-service.crt
       - STT_WHISPER_SERVICE_KEY_PATH=/sentiric-certificates/certs/stt-whisper-service.key
+      
     ports:
-      - "${STT_WHISPER_SERVICE_HTTP_PORT:-15030}:${STT_WHISPER_SERVICE_HTTP_PORT:-15030}"
-      - "${STT_WHISPER_SERVICE_GRPC_PORT:-15031}:${STT_WHISPER_SERVICE_GRPC_PORT:-15031}"
-      - "${STT_WHISPER_SERVICE_METRICS_PORT:-15032}:${STT_WHISPER_SERVICE_METRICS_PORT:-15032}"
+      - "15030:15030"
+      - "15031:15031"
     networks:
       sentiric-net:
         ipv4_address: 10.88.50.3
-    # Whisper servisi HTTP portunu (15030) plaintext dinler
+    # Whisper HTTP (15030) şifresizdir, curl ile kontrol edilir
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:15030/health" ]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 2m # Model indirme süresi için pay
+      start_period: 2m 
+
+volumes:
+  stt-whisper-models:
