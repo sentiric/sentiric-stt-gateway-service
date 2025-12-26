@@ -1,4 +1,3 @@
-# path: Dockerfile
 # --- STAGE 1: Chef (Planlama) ---
 FROM lukemathwalker/cargo-chef:latest-rust-1.84-bookworm AS chef
 WORKDIR /app
@@ -15,7 +14,7 @@ COPY --from=planner /app/recipe.json recipe.json
 # Protobuf derleyicisini kur
 RUN apt-get update && apt-get install -y protobuf-compiler cmake && rm -rf /var/lib/apt/lists/*
 
-# Bağımlılıkları derle ve cachele
+# Bağımlılıkları derle
 RUN cargo chef cook --release --recipe-path recipe.json
 
 # Kaynak kodları kopyala ve binary'i derle
@@ -25,22 +24,26 @@ RUN cargo build --release --bin sentiric-stt-gateway-service
 # --- STAGE 4: Runtime (Minimal) ---
 FROM debian:bookworm-slim AS runtime
 
+# curl ve netcat-openbsd ekledik (Healthcheck için)
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates \
     libssl-dev \
     curl \
+    netcat-openbsd \
     && rm -rf /var/lib/apt/lists/*
 
-# Güvenlik: Root olmayan kullanıcı
 RUN useradd -m -u 1001 appuser
 USER appuser
 WORKDIR /app
 
-# Derlenen binary'i al
 COPY --from=builder /app/target/release/sentiric-stt-gateway-service /app/
 
 # Varsayılan Env Vars
 ENV RUST_LOG=info
+ENV STT_GATEWAY_SERVICE_LISTEN_ADDRESS=0.0.0.0
+ENV STT_GATEWAY_SERVICE_HTTP_PORT=15020
+ENV STT_GATEWAY_SERVICE_GRPC_PORT=15021
+
 EXPOSE 15020 15021 15022
 
 ENTRYPOINT ["./sentiric-stt-gateway-service"]
