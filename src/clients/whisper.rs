@@ -6,7 +6,7 @@ use tonic::transport::{Channel, Endpoint};
 use tonic::Request;
 use futures::Stream;
 use std::sync::Arc;
-use tracing::{info, error, warn};
+use tracing::{info, error}; // warn kaldırıldı
 use tonic::metadata::MetadataValue;
 use std::str::FromStr;
 
@@ -59,5 +59,10 @@ impl WhisperClient {
                 Err(e)
             }
         }
+    }
+
+    // [YENİ]
+    pub fn is_ready(&self) -> bool {
+        true
     }
 }

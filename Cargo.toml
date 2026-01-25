@@ -1,43 +1,37 @@
 [package]
 name = "sentiric-stt-gateway-service"
-version = "1.1.1"
+version = "1.1.2" # Minor bump
 edition = "2021"
 
 [dependencies]
-# Async & Runtime
 tokio = { version = "1.36", features = ["full"] }
 tokio-stream = { version = "0.1", features = ["net"] }
 async-stream = "0.3"
 futures = "0.3"
-
-# gRPC
 tonic = { version = "0.11", features = ["tls", "gzip"] }
 prost = "0.12"
-
-# Config & Environment
 config = "0.14"
 dotenvy = "0.15"
 serde = { version = "1.0", features = ["derive"] }
 url = "2.5"
-
-# Error Handling
 thiserror = "1.0"
 anyhow = "1.0"
-
-# Observability
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "json"] }
+hyper = { version = "0.14.28", features = ["full"] }
+rustls = { version = "0.23", default-features = false, features = ["ring"] }
 
-# Sentiric Ecosystem
-# Not: build sırasında git erişimi gerektiği için Docker'da ssh forwarding veya https kullanılır.
+# Metrics
+metrics = "0.21"
+metrics-exporter-prometheus = "0.12"
+
 [dependencies.sentiric-contracts]
 git = "https://github.com/sentiric/sentiric-contracts.git"
-tag = "v1.13.2"
+tag = "v1.13.5" # GÜNCEL
 
 [build-dependencies]
 tonic-build = "0.11"
 
-# Sadece testler için gerekli kütüphaneler
 [dev-dependencies]
 hound = "3.5"
 

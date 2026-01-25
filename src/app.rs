@@ -2,6 +2,7 @@ use crate::config::AppConfig;
 use crate::clients::whisper::WhisperClient;
 use crate::grpc::server::SttGateway;
 use crate::tls::load_server_tls_config;
+use crate::metrics::start_metrics_server; // EKLENDİ
 use sentiric_contracts::sentiric::stt::v1::stt_gateway_service_server::SttGatewayServiceServer;
 use tonic::transport::Server;
 use std::net::SocketAddr;
@@ -18,6 +19,11 @@ impl App {
         info!("🚀 STT Gateway Service v{} starting...", config.service_version);
 
         let whisper_client = WhisperClient::connect(&config).await?;
+        
+        // Metrics Server
+        let metrics_addr: SocketAddr = format!("{}:{}", config.host, config.http_port).parse()?;
+        start_metrics_server(metrics_addr, whisper_client.clone());
+
         let addr: SocketAddr = format!("{}:{}", config.host, config.grpc_port).parse()?;
         let gateway_service = SttGateway::new(whisper_client);
         
