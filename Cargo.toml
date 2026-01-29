@@ -25,9 +25,7 @@ rustls = { version = "0.23", default-features = false, features = ["ring"] }
 metrics = "0.21"
 metrics-exporter-prometheus = "0.12"
 
-[dependencies.sentiric-contracts]
-git = "https://github.com/sentiric/sentiric-contracts.git"
-tag = "v1.13.5" # GÜNCEL
+sentiric-contracts = { git = "https://github.com/sentiric/sentiric-contracts.git", tag = "v1.13.6" }
 
 [build-dependencies]
 tonic-build = "0.11"
