@@ -1,12 +1,13 @@
+// Dosya: src/app.rs
 use crate::config::AppConfig;
 use crate::clients::whisper::WhisperClient;
 use crate::grpc::server::SttGateway;
 use crate::tls::load_server_tls_config;
-use crate::metrics::start_metrics_server; // EKLENDİ
+use crate::metrics::start_metrics_server;
 use sentiric_contracts::sentiric::stt::v1::stt_gateway_service_server::SttGatewayServiceServer;
 use tonic::transport::Server;
 use std::net::SocketAddr;
-use tracing::{info, warn};
+use tracing::{info};
 use anyhow::Result;
 use std::sync::Arc;
 
@@ -15,7 +16,9 @@ pub struct App;
 impl App {
     pub async fn run() -> Result<()> {
         let config = Arc::new(AppConfig::load()?);
-        tracing_subscriber::fmt().with_env_filter(&config.rust_log).init();
+        
+        // [ARCH-COMPLIANCE] constraints.yaml'ın gerektirdiği şekilde SUTS v4.0 JSON loglama formatı zorunlu kılındı.
+        tracing_subscriber::fmt().json().with_env_filter(&config.rust_log).init();
         info!("🚀 STT Gateway Service v{} starting...", config.service_version);
 
         let whisper_client = WhisperClient::connect(&config).await?;
@@ -29,21 +32,16 @@ impl App {
         
         let mut builder = Server::builder();
 
-        if !config.stt_gateway_service_cert_path.is_empty() && !config.grpc_tls_ca_path.is_empty() {
-             match load_server_tls_config(&config).await {
-                Ok(tls) => {
-                    builder = builder.tls_config(tls)?;
-                    info!("🎧 gRPC Server listening on {} (mTLS Enabled)", addr);
-                },
-                Err(e) => {
-                     warn!("⚠️ TLS Load Failed: {}. Falling back to INSECURE.", e);
-                     info!("🎧 gRPC Server listening on {} (INSECURE)", addr);
-                }
-             }
-        } else {
-             warn!("⚠️ TLS paths empty. Starting in INSECURE mode.");
-             info!("🎧 gRPC Server listening on {} (INSECURE)", addr);
+        // [ARCH-COMPLIANCE] constraints.yaml'ın gerektirdiği şekilde gRPC iletişiminde mTLS zorunlu kılındı. Insecure fallback kaldırıldı.
+        if config.stt_gateway_service_cert_path.is_empty() || config.grpc_tls_ca_path.is_empty() {
+             anyhow::bail!("TLS configuration paths cannot be empty. mTLS is REQUIRED by architecture constraints.");
         }
+
+        let tls = load_server_tls_config(&config).await
+            .map_err(|e| anyhow::anyhow!("⚠️ TLS Load Failed: {}. mTLS is strictly required. Shutting down.", e))?;
+            
+        builder = builder.tls_config(tls)?;
+        info!("🎧 gRPC Server listening on {} (mTLS Enabled)", addr);
 
         builder
             .add_service(SttGatewayServiceServer::new(gateway_service))

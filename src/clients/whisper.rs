@@ -1,3 +1,4 @@
+// Dosya: src/clients/whisper.rs
 use crate::config::AppConfig;
 use crate::tls::load_client_tls_config;
 use sentiric_contracts::sentiric::stt::v1::stt_whisper_service_client::SttWhisperServiceClient;
@@ -6,7 +7,7 @@ use tonic::transport::{Channel, Endpoint};
 use tonic::Request;
 use futures::Stream;
 use std::sync::Arc;
-use tracing::{info, error}; // warn kaldırıldı
+use tracing::{info, error};
 use tonic::metadata::MetadataValue;
 use std::str::FromStr;
 
@@ -19,19 +20,17 @@ impl WhisperClient {
     pub async fn connect(config: &Arc<AppConfig>) -> anyhow::Result<Self> {
         let url = config.stt_whisper_service_grpc_url.clone();
         
-        let channel = if url.starts_with("http://") {
-            info!("🔌 Connecting to Whisper Service (INSECURE): {}", url);
-            Endpoint::from_shared(url)?
-                .connect()
-                .await?
-        } else {
-            info!("🔐 Connecting to Whisper Service (mTLS): {}", url);
-            let tls_config = load_client_tls_config(config).await?;
-            Endpoint::from_shared(url)?
-                .tls_config(tls_config)?
-                .connect()
-                .await?
-        };
+        // [ARCH-COMPLIANCE] constraints.yaml'ın gerektirdiği şekilde tüm gRPC bağlantılarında mTLS zorunlu kılındı. HTTP fallback kaldırıldı.
+        if url.starts_with("http://") {
+            anyhow::bail!("Insecure connection attempt to {}. mTLS (https://) is REQUIRED by architecture constraints.", url);
+        }
+
+        info!("🔐 Connecting to Whisper Service (mTLS): {}", url);
+        let tls_config = load_client_tls_config(config).await?;
+        let channel = Endpoint::from_shared(url)?
+            .tls_config(tls_config)?
+            .connect()
+            .await?;
 
         Ok(Self {
             client: SttWhisperServiceClient::new(channel),
@@ -61,7 +60,6 @@ impl WhisperClient {
         }
     }
 
-    // [YENİ]
     pub fn is_ready(&self) -> bool {
         true
     }
