@@ -7,7 +7,7 @@ use crate::metrics::start_metrics_server;
 use sentiric_contracts::sentiric::stt::v1::stt_gateway_service_server::SttGatewayServiceServer;
 use tonic::transport::Server;
 use std::net::SocketAddr;
-use tracing::{info};
+use tracing::{info, error};
 use anyhow::Result;
 use std::sync::Arc;
 
@@ -19,7 +19,13 @@ impl App {
         
         // [ARCH-COMPLIANCE] constraints.yaml'ın gerektirdiği şekilde SUTS v4.0 JSON loglama formatı zorunlu kılındı.
         tracing_subscriber::fmt().json().with_env_filter(&config.rust_log).init();
-        info!("🚀 STT Gateway Service v{} starting...", config.service_version);
+        
+        info!(
+            event = "SERVICE_START",
+            schema_v = "1.0.0",
+            service_version = %config.service_version,
+            "🚀 STT Gateway Service starting..."
+        );
 
         let whisper_client = WhisperClient::connect(&config).await?;
         
@@ -41,12 +47,21 @@ impl App {
             .map_err(|e| anyhow::anyhow!("⚠️ TLS Load Failed: {}. mTLS is strictly required. Shutting down.", e))?;
             
         builder = builder.tls_config(tls)?;
-        info!("🎧 gRPC Server listening on {} (mTLS Enabled)", addr);
+        
+        info!(
+            event = "GRPC_SERVER_READY",
+            address = %addr,
+            "🎧 gRPC Server listening (mTLS Enabled)"
+        );
 
-        builder
+        if let Err(e) = builder
             .add_service(SttGatewayServiceServer::new(gateway_service))
             .serve(addr)
-            .await?;
+            .await 
+        {
+            error!(event = "GRPC_SERVER_CRASH", error = %e, "gRPC Server stopped unexpectedly.");
+            return Err(e.into());
+        }
 
         Ok(())
     }
