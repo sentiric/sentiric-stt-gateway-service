@@ -4,6 +4,7 @@ use crate::clients::whisper::WhisperClient;
 use crate::grpc::server::SttGateway;
 use crate::tls::load_server_tls_config;
 use crate::metrics::start_metrics_server;
+use crate::logger::SutsV4Formatter; // [YENİ]
 use sentiric_contracts::sentiric::stt::v1::stt_gateway_service_server::SttGatewayServiceServer;
 use tonic::transport::Server;
 use std::net::SocketAddr;
@@ -17,13 +18,20 @@ impl App {
     pub async fn run() -> Result<()> {
         let config = Arc::new(AppConfig::load()?);
         
-        // [ARCH-COMPLIANCE] constraints.yaml'ın gerektirdiği şekilde SUTS v4.0 JSON loglama formatı zorunlu kılındı.
-        tracing_subscriber::fmt().json().with_env_filter(&config.rust_log).init();
+        //[ARCH-COMPLIANCE] Özel SUTS v4.0 Formatter ile tracing_subscriber ayağa kaldırılır
+        let formatter = SutsV4Formatter {
+            service_name: "stt-gateway-service".to_string(),
+            service_version: config.service_version.clone(),
+            service_env: config.env.clone(),
+        };
+
+        tracing_subscriber::fmt()
+            .with_env_filter(&config.rust_log)
+            .event_format(formatter)
+            .init();
         
         info!(
             event = "SERVICE_START",
-            schema_v = "1.0.0",
-            service_version = %config.service_version,
             "🚀 STT Gateway Service starting..."
         );
 
@@ -38,7 +46,7 @@ impl App {
         
         let mut builder = Server::builder();
 
-        // [ARCH-COMPLIANCE] constraints.yaml'ın gerektirdiği şekilde gRPC iletişiminde mTLS zorunlu kılındı. Insecure fallback kaldırıldı.
+        // [ARCH-COMPLIANCE] constraints.yaml'ın gerektirdiği şekilde gRPC iletişiminde mTLS zorunlu kılındı.
         if config.stt_gateway_service_cert_path.is_empty() || config.grpc_tls_ca_path.is_empty() {
              anyhow::bail!("TLS configuration paths cannot be empty. mTLS is REQUIRED by architecture constraints.");
         }
