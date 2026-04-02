@@ -1,44 +1,35 @@
-# --- STAGE 1: Chef (Planlama) ---
-FROM lukemathwalker/cargo-chef:latest-rust-1.84-bookworm AS chef
+# File: sentiric-stt-gateway-service/Dockerfile
+# --- STAGE 1: Builder ---
+FROM rust:1.93-slim-bookworm AS builder
+
+# Protoc ve gerekli derleme araçları
+RUN apt-get update && \
+    apt-get install -y git pkg-config libssl-dev protobuf-compiler curl cmake && \
+    rm -rf /var/lib/apt/lists/*
+
 WORKDIR /app
-
-# --- STAGE 2: Planner ---
-FROM chef AS planner
 COPY . .
-RUN cargo chef prepare --recipe-path recipe.json
 
-# --- STAGE 3: Builder ---
-FROM chef AS builder
-COPY --from=planner /app/recipe.json recipe.json
-
-# Protobuf derleyicisini kur
-RUN apt-get update && apt-get install -y protobuf-compiler cmake && rm -rf /var/lib/apt/lists/*
-
-# Bağımlılıkları derle
-RUN cargo chef cook --release --recipe-path recipe.json
-
-# Kaynak kodları kopyala ve binary'i derle
-COPY . .
+# Release derlemesi
 RUN cargo build --release --bin sentiric-stt-gateway-service
 
-# --- STAGE 4: Runtime (Minimal) ---
-FROM debian:bookworm-slim AS runtime
+# --- STAGE 2: Final ---
+FROM debian:bookworm-slim
 
-# curl ve netcat-openbsd ekledik (Healthcheck için)
+# Healthcheck için netcat ve curl
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    ca-certificates \
-    libssl-dev \
-    curl \
-    netcat-openbsd \
+    ca-certificates libssl-dev netcat-openbsd curl \
     && rm -rf /var/lib/apt/lists/*
 
+# Güvenlik: Non-root kullanıcı
 RUN useradd -m -u 1001 appuser
 USER appuser
 WORKDIR /app
 
-COPY --from=builder /app/target/release/sentiric-stt-gateway-service /app/
+# Binary'i al
+COPY --from=builder /app/target/release/sentiric-stt-gateway-service .
 
-# Varsayılan Env Vars
+# Varsayılan ortam değişkenleri
 ENV RUST_LOG=info
 ENV STT_GATEWAY_SERVICE_LISTEN_ADDRESS=0.0.0.0
 ENV STT_GATEWAY_SERVICE_HTTP_PORT=15020
