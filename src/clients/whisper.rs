@@ -75,11 +75,15 @@ impl WhisperClient {
         match client.whisper_transcribe_stream(request).await {
             Ok(response) => Ok(response.into_inner()),
             Err(e) => {
+                let tid = trace_id.as_deref().unwrap_or("unknown");
+                let sid = span_id.as_deref().unwrap_or("unknown");
+                let ten = tenant_id.as_deref().unwrap_or("unknown");
+
                 error!(
                     event = "UPSTREAM_CALL_FAILED",
-                    trace_id = ?trace_id,
-                    span_id = ?span_id,
-                    tenant_id = ?tenant_id,
+                    trace_id = %tid,
+                    span_id = %sid,
+                    tenant_id = %ten,
                     error = %e,
                     "❌ Whisper Engine gRPC call failed"
                 );
