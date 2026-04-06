@@ -1583,8 +1583,8 @@ checksum = "d767eb0aabc880b29956c35734170f26ed551a859dbd361d140cdbeca61ab1e2"
 
 [[package]]
 name = "sentiric-contracts"
-version = "1.20.5"
-source = "git+https://github.com/sentiric/sentiric-contracts.git?tag=v1.20.5#5f03ff9ba24c3dc5751c460ea85145bebadfc427"
+version = "1.20.6"
+source = "git+https://github.com/sentiric/sentiric-contracts.git?tag=v1.20.6#922f98e5d76cd23ede0e263b3c2d0f7d2ba3cb69"
 dependencies = [
  "prost",
  "prost-types",
@@ -1595,7 +1595,7 @@ dependencies = [
 
 [[package]]
 name = "sentiric-stt-gateway-service"
-version = "1.2.0"
+version = "1.2.1"
 dependencies = [
  "anyhow",
  "async-stream",

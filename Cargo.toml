@@ -1,6 +1,6 @@
 [package]
 name = "sentiric-stt-gateway-service"
-version = "1.2.0"
+version = "1.2.1"
 edition = "2021"
 
 [dependencies]
@@ -30,7 +30,8 @@ tracing-subscriber = { version = "0.3", features = ["env-filter", "fmt", "regist
 metrics = "0.21"
 metrics-exporter-prometheus = "0.12"
 
-sentiric-contracts = { git = "https://github.com/sentiric/sentiric-contracts.git", tag = "v1.20.5" }
+# Contracts güncellendi
+sentiric-contracts = { git = "https://github.com/sentiric/sentiric-contracts.git", tag = "v1.20.6" }
 
 [build-dependencies]
 tonic-build = "0.11"

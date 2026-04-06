@@ -1,9 +1,9 @@
-// File: sentiric-stt-gateway-service/src/grpc/server.rs
+// Dosya: src/grpc/server.rs
 use crate::clients::whisper::WhisperClient;
 use futures::StreamExt;
 use sentiric_contracts::sentiric::stt::v1::stt_gateway_service_server::SttGatewayService;
 use sentiric_contracts::sentiric::stt::v1::{
-    TranscribeStreamRequest, TranscribeStreamResponse, WhisperTranscribeStreamRequest,
+    TokenData, TranscribeStreamRequest, TranscribeStreamResponse, WhisperTranscribeStreamRequest,
 };
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status, Streaming};
@@ -53,7 +53,6 @@ impl SttGatewayService for SttGateway {
             .and_then(|m| m.to_str().ok())
             .map(|s| s.to_string());
 
-        // Display için string'e açma
         let trace_id = trace_id_opt.as_deref().unwrap_or("unknown");
         let span_id = span_id_opt.as_deref().unwrap_or("unknown");
         let tenant_id = tenant_id_opt.as_deref().unwrap_or("unknown");
@@ -65,11 +64,8 @@ impl SttGatewayService for SttGateway {
             ));
         }
 
-        // ESKİ: trace_id = ?trace_id
-        // YENİ: trace_id = %trace_id (SUTS v4.0 Uyumlu)
         info!(event = "STT_STREAM_CONNECTION_ESTABLISHED", trace_id = %trace_id, span_id = %span_id, tenant_id = %tenant_id, "🎧 STT Stream Connection Established.");
 
-        // İlerideki loglar için kopyalar
         let t_id_clone = trace_id.to_string();
         let s_id_clone = span_id.to_string();
         let ten_id_clone = tenant_id.to_string();
@@ -86,7 +82,6 @@ impl SttGatewayService for SttGateway {
             std::future::ready(result)
         });
 
-        // Whisper client çağrısına Option'ları geçir (client kendi içinde hallediyor)
         let mut whisper_response_stream = self.whisper_client.transcribe_stream(
             outbound_stream, trace_id_opt.clone(), span_id_opt.clone(), tenant_id_opt.clone()
         ).await.map_err(|e| {
@@ -104,7 +99,18 @@ impl SttGatewayService for SttGateway {
             while let Some(result) = whisper_response_stream.next().await {
                 match result {
                     Ok(w_resp) => {
-                        // [CRITICAL FIX E0063]: Yeni eklenen Affective alanları eşleştirildi.
+                        // [ARCH-COMPLIANCE FIX]: Whisper'dan gelen Kelime (Token) verilerini dönüştür.
+                        let mapped_words: Vec<TokenData> = w_resp
+                            .words
+                            .into_iter()
+                            .map(|w| TokenData {
+                                word: w.word,
+                                start: w.start,
+                                end: w.end,
+                                probability: w.probability,
+                            })
+                            .collect();
+
                         let g_resp = TranscribeStreamResponse {
                             partial_transcription: w_resp.transcription,
                             is_final: w_resp.is_final,
@@ -112,7 +118,13 @@ impl SttGatewayService for SttGateway {
                             emotion_proxy: w_resp.emotion_proxy,
                             arousal: w_resp.arousal,
                             valence: w_resp.valence,
+
+                            // Yeni eklenen alanlar map'leniyor
+                            speaker_id: w_resp.speaker_id,
+                            speaker_vec: w_resp.speaker_vec,
+                            words: mapped_words,
                         };
+
                         if tx.send(Ok(g_resp)).await.is_err() {
                             warn!(event = "CLIENT_DISCONNECTED", trace_id = ?t_id_final, span_id = ?s_id_final, tenant_id = ?ten_id_final, "Client disconnected, stopping stream.");
                             break;
